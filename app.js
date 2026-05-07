@@ -630,60 +630,338 @@
     renderTodo();
   }
 
-  function fetchWeather() {
-    var el = document.getElementById('weather-body');
-    if (!el) return;
-    var lat = state.settings.lat;
-    var lon = state.settings.lon;
-    el.textContent = 'Loading…';
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        function (p) {
-          lat = p.coords.latitude;
-          lon = p.coords.longitude;
-          doWeatherFetch(lat, lon, el);
-        },
-        function () {
-          doWeatherFetch(lat, lon, el);
-        }
-      );
-    } else {
-      doWeatherFetch(lat, lon, el);
+  /* ------------------------------------------------------------
+     Weather: current conditions + Top 10 roof-risk areas (300 mi)
+     ------------------------------------------------------------ */
+
+  // Curated regional metro catalog (kept compact; covers OTT's likely operating
+  // radius from Columbia, MO and supports any user-chosen center). Each entry:
+  // { name: "City, ST", lat, lon }.
+  var CITY_CATALOG = [
+    // Missouri & immediate neighbors
+    { n: 'Columbia, MO', a: 38.9517, o: -92.3341 },
+    { n: 'Jefferson City, MO', a: 38.5767, o: -92.1735 },
+    { n: 'Kansas City, MO', a: 39.0997, o: -94.5786 },
+    { n: 'St. Louis, MO', a: 38.627, o: -90.1994 },
+    { n: 'Springfield, MO', a: 37.2089, o: -93.2923 },
+    { n: 'Joplin, MO', a: 37.0842, o: -94.5133 },
+    { n: 'St. Joseph, MO', a: 39.7675, o: -94.8467 },
+    { n: 'Cape Girardeau, MO', a: 37.3059, o: -89.5181 },
+    { n: 'Branson, MO', a: 36.6437, o: -93.2185 },
+    { n: 'Lake Ozark, MO', a: 38.197, o: -92.6371 },
+    { n: 'Sedalia, MO', a: 38.7045, o: -93.2283 },
+    { n: 'Hannibal, MO', a: 39.7084, o: -91.3585 },
+    // Illinois
+    { n: 'Springfield, IL', a: 39.7817, o: -89.6501 },
+    { n: 'Peoria, IL', a: 40.6936, o: -89.589 },
+    { n: 'Bloomington, IL', a: 40.4842, o: -88.9937 },
+    { n: 'Champaign, IL', a: 40.1164, o: -88.2434 },
+    { n: 'Chicago, IL', a: 41.8781, o: -87.6298 },
+    { n: 'Rockford, IL', a: 42.2711, o: -89.0937 },
+    { n: 'Decatur, IL', a: 39.8403, o: -88.9548 },
+    { n: 'Quincy, IL', a: 39.9356, o: -91.4099 },
+    // Iowa
+    { n: 'Des Moines, IA', a: 41.5868, o: -93.625 },
+    { n: 'Cedar Rapids, IA', a: 41.9779, o: -91.6656 },
+    { n: 'Davenport, IA', a: 41.5236, o: -90.5776 },
+    { n: 'Iowa City, IA', a: 41.6611, o: -91.5302 },
+    { n: 'Council Bluffs, IA', a: 41.2619, o: -95.8608 },
+    { n: 'Sioux City, IA', a: 42.4999, o: -96.4003 },
+    { n: 'Waterloo, IA', a: 42.4928, o: -92.3426 },
+    // Kansas
+    { n: 'Topeka, KS', a: 39.0473, o: -95.6752 },
+    { n: 'Wichita, KS', a: 37.6872, o: -97.3301 },
+    { n: 'Overland Park, KS', a: 38.9822, o: -94.6708 },
+    { n: 'Lawrence, KS', a: 38.9717, o: -95.2353 },
+    { n: 'Manhattan, KS', a: 39.1836, o: -96.5717 },
+    // Nebraska
+    { n: 'Omaha, NE', a: 41.2565, o: -95.9345 },
+    { n: 'Lincoln, NE', a: 40.8136, o: -96.7026 },
+    { n: 'Grand Island, NE', a: 40.9264, o: -98.342 },
+    // Arkansas
+    { n: 'Little Rock, AR', a: 34.7465, o: -92.2896 },
+    { n: 'Fayetteville, AR', a: 36.0822, o: -94.1719 },
+    { n: 'Fort Smith, AR', a: 35.3859, o: -94.3985 },
+    { n: 'Jonesboro, AR', a: 35.8423, o: -90.7043 },
+    // Oklahoma
+    { n: 'Oklahoma City, OK', a: 35.4676, o: -97.5164 },
+    { n: 'Tulsa, OK', a: 36.154, o: -95.9928 },
+    // Tennessee / Kentucky
+    { n: 'Memphis, TN', a: 35.1495, o: -90.049 },
+    { n: 'Nashville, TN', a: 36.1627, o: -86.7816 },
+    { n: 'Louisville, KY', a: 38.2527, o: -85.7585 },
+    { n: 'Lexington, KY', a: 38.0406, o: -84.5037 },
+    // Indiana / Ohio
+    { n: 'Indianapolis, IN', a: 39.7684, o: -86.1581 },
+    { n: 'Evansville, IN', a: 37.9716, o: -87.5711 },
+    { n: 'Cincinnati, OH', a: 39.1031, o: -84.512 },
+    { n: 'Columbus, OH', a: 39.9612, o: -82.9988 },
+    // Wisconsin / Minnesota
+    { n: 'Madison, WI', a: 43.0731, o: -89.4012 },
+    { n: 'Milwaukee, WI', a: 43.0389, o: -87.9065 },
+    { n: 'Minneapolis, MN', a: 44.9778, o: -93.265 },
+    { n: 'Rochester, MN', a: 44.0121, o: -92.4802 },
+    // Texas (north/east only)
+    { n: 'Dallas, TX', a: 32.7767, o: -96.797 },
+    { n: 'Fort Worth, TX', a: 32.7555, o: -97.3308 },
+    { n: 'Tulsa Suburbs, OK', a: 36.06, o: -95.79 },
+    // South Dakota
+    { n: 'Sioux Falls, SD', a: 43.5446, o: -96.7311 },
+  ];
+
+  function loadWeatherCenter() {
+    var saved = loadJSON(STORAGE_PREFIX + 'weather_center', null);
+    if (saved && typeof saved.lat === 'number' && typeof saved.lon === 'number') {
+      return saved;
     }
+    return { lat: state.settings.lat, lon: state.settings.lon, label: 'Columbia, MO (default)' };
+  }
+  function saveWeatherCenter(c) {
+    saveJSON(STORAGE_PREFIX + 'weather_center', c);
   }
 
-  function doWeatherFetch(lat, lon, el) {
+  function haversineMiles(lat1, lon1, lat2, lon2) {
+    var R = 3958.8;
+    var toRad = Math.PI / 180;
+    var dLat = (lat2 - lat1) * toRad;
+    var dLon = (lon2 - lon1) * toRad;
+    var s1 = Math.sin(dLat / 2);
+    var s2 = Math.sin(dLon / 2);
+    var a = s1 * s1 + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * s2 * s2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+  }
+
+  function fetchWeather() {
+    var center = loadWeatherCenter();
+    renderWeatherCenterLine(center);
+    fetchCurrentConditions(center);
+    fetchVulnerableAreas(center);
+  }
+
+  function renderWeatherCenterLine(center) {
+    var el = document.getElementById('weather-center');
+    if (!el) return;
+    el.textContent = 'Based near: ' + (center.label || (center.lat.toFixed(2) + ', ' + center.lon.toFixed(2)));
+  }
+
+  function fetchCurrentConditions(center) {
+    var el = document.getElementById('weather-summary');
+    if (!el) return;
+    el.innerHTML = '<div class="skeleton" style="width:60%"></div><div class="skeleton" style="width:40%"></div>';
     var url =
       'https://api.open-meteo.com/v1/forecast?latitude=' +
-      lat +
+      center.lat +
       '&longitude=' +
-      lon +
-      '&current=temperature_2m,relative_humidity_2m,weather_code,precipitation_probability&hourly=precipitation_probability&temperature_unit=fahrenheit&wind_speed_unit=mph';
+      center.lon +
+      '&current=temperature_2m,precipitation_probability,wind_speed_10m' +
+      '&hourly=precipitation_probability&temperature_unit=fahrenheit&wind_speed_unit=mph';
     fetch(url)
-      .then(function (r) {
-        return r.json();
-      })
+      .then(function (r) { return r.json(); })
       .then(function (d) {
         var t = d.current && d.current.temperature_2m;
-        var pr = d.hourly && d.hourly.precipitation_probability;
-        var next =
-          pr && pr.length
-            ? 'Next hours max rain chance: ' +
-              Math.max.apply(null, pr.slice(0, 12)) +
-              '%'
-            : '';
+        var pr = (d.hourly && d.hourly.precipitation_probability) || [];
+        var nextMax = pr.length ? Math.max.apply(null, pr.slice(0, 12)) : null;
         el.innerHTML =
-          '<div><strong>' +
-          Math.round(t) +
-          '&deg;F</strong> &nbsp; local estimate</div>' +
-          '<div class="muted small">' +
-          next +
-          '</div>';
+          '<div class="weather-summary">' +
+          '<span class="temp">' + Math.round(t) + '\u00B0F</span>' +
+          '<span class="temp-sub">local estimate</span>' +
+          '</div>' +
+          (nextMax !== null
+            ? '<div class="weather-rain">Next hours max rain chance: ' + nextMax + '%</div>'
+            : '');
       })
       .catch(function () {
         el.textContent = 'Weather unavailable (offline or blocked).';
       });
   }
+
+  function vulnerabilityScore(forecast) {
+    // Score 0–100. Weighted blend of short-horizon precipitation probability,
+    // wind gusts, and a small bump for total precipitation. Tuned for readability.
+    var hourly = forecast.hourly || {};
+    var pp = hourly.precipitation_probability || [];
+    var gust = hourly.wind_gusts_10m || [];
+    var precip = hourly.precipitation || [];
+    var horizon = Math.min(48, pp.length, gust.length || 48);
+    if (!horizon) return { score: 0, reason: 'No forecast data' };
+
+    var maxRain = 0, maxGust = 0, totalPrecip = 0;
+    for (var i = 0; i < horizon; i++) {
+      if (pp[i] != null && pp[i] > maxRain) maxRain = pp[i];
+      if (gust[i] != null && gust[i] > maxGust) maxGust = gust[i];
+      if (precip[i] != null) totalPrecip += precip[i];
+    }
+    var rainComp = Math.min(100, maxRain) * 0.55;
+    var gustComp = Math.min(100, (maxGust / 60) * 100) * 0.35;
+    var precipComp = Math.min(100, totalPrecip * 12) * 0.10;
+    var score = Math.round(rainComp + gustComp + precipComp);
+    var bits = [];
+    if (maxRain > 0) bits.push('rain ' + Math.round(maxRain) + '%');
+    if (maxGust > 0) bits.push('gusts ' + Math.round(maxGust) + ' mph');
+    return { score: score, reason: bits.join(', ') || 'mild conditions' };
+  }
+
+  function fetchOpenMeteoFor(lat, lon) {
+    var url =
+      'https://api.open-meteo.com/v1/forecast?latitude=' +
+      lat +
+      '&longitude=' +
+      lon +
+      '&hourly=precipitation_probability,wind_gusts_10m,precipitation' +
+      '&forecast_days=2&temperature_unit=fahrenheit&wind_speed_unit=mph';
+    return fetch(url).then(function (r) { return r.json(); });
+  }
+
+  function fetchVulnerableAreas(center) {
+    var host = document.getElementById('weather-areas-body');
+    if (!host) return;
+    var candidates = CITY_CATALOG.map(function (c) {
+      return { name: c.n, lat: c.a, lon: c.o, dist: haversineMiles(center.lat, center.lon, c.a, c.o) };
+    }).filter(function (c) { return c.dist <= 300; });
+
+    if (!candidates.length) {
+      host.innerHTML = '<div class="muted small">No catalog cities within 300 miles of this center. Try a more central location.</div>';
+      return;
+    }
+
+    candidates.sort(function (a, b) { return a.dist - b.dist; });
+    var pool = candidates.slice(0, 24);
+
+    host.innerHTML =
+      '<div class="skeleton"></div>' +
+      '<div class="skeleton" style="width:90%"></div>' +
+      '<div class="skeleton" style="width:80%"></div>' +
+      '<div class="skeleton" style="width:85%"></div>';
+
+    runConcurrent(pool, 6, function (c) {
+      return fetchOpenMeteoFor(c.lat, c.lon)
+        .then(function (d) {
+          var s = vulnerabilityScore(d);
+          return { name: c.name, dist: c.dist, score: s.score, reason: s.reason };
+        })
+        .catch(function () {
+          return { name: c.name, dist: c.dist, score: 0, reason: 'forecast unavailable' };
+        });
+    }).then(function (results) {
+      results.sort(function (a, b) {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.dist - b.dist;
+      });
+      var top = results.slice(0, 10);
+      if (!top.length) {
+        host.innerHTML = '<div class="muted small">No data returned.</div>';
+        return;
+      }
+      host.innerHTML =
+        '<ol class="areas">' +
+        top.map(function (r, idx) {
+          return (
+            '<li>' +
+            '<span class="rank">' + (idx + 1) + '</span>' +
+            '<div>' +
+            '<div class="place">' + esc(r.name) + ' <span class="muted small">&middot; ' + Math.round(r.dist) + ' mi</span></div>' +
+            '<div class="reason">' + esc(r.reason) + '</div>' +
+            '</div>' +
+            '<span class="score">' + r.score + '</span>' +
+            '</li>'
+          );
+        }).join('') +
+        '</ol>';
+    });
+  }
+
+  function runConcurrent(items, limit, worker) {
+    return new Promise(function (resolve) {
+      var results = new Array(items.length);
+      var i = 0, active = 0, done = 0;
+      function next() {
+        while (active < limit && i < items.length) {
+          (function (idx) {
+            active++;
+            worker(items[idx]).then(function (r) {
+              results[idx] = r;
+              active--; done++;
+              if (done === items.length) resolve(results);
+              else next();
+            });
+          })(i++);
+        }
+        if (!items.length) resolve(results);
+      }
+      next();
+    });
+  }
+
+  window.useMyWeatherLocation = function () {
+    if (!navigator.geolocation) {
+      toast('Geolocation not available in this browser.');
+      return;
+    }
+    toast('Locating…');
+    navigator.geolocation.getCurrentPosition(
+      function (p) {
+        var c = {
+          lat: p.coords.latitude,
+          lon: p.coords.longitude,
+          label: 'My location',
+        };
+        // Reverse geocode for a friendlier label (best-effort, no key required).
+        var revUrl =
+          'https://geocoding-api.open-meteo.com/v1/reverse?latitude=' +
+          c.lat + '&longitude=' + c.lon + '&count=1&language=en&format=json';
+        fetch(revUrl)
+          .then(function (r) { return r.json(); })
+          .catch(function () { return null; })
+          .then(function (data) {
+            if (data && data.results && data.results[0]) {
+              var r = data.results[0];
+              c.label = r.name + (r.admin1 ? ', ' + r.admin1 : '');
+            }
+            saveWeatherCenter(c);
+            fetchWeather();
+            toast('Weather center updated');
+          });
+      },
+      function () {
+        toast('Location permission denied.');
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
+    );
+  };
+
+  window.searchWeatherLocation = function () {
+    var inp = document.getElementById('weather-search');
+    if (!inp) return;
+    var q = (inp.value || '').trim();
+    if (!q) {
+      toast('Type a city, ZIP, or address first.');
+      return;
+    }
+    var url =
+      'https://geocoding-api.open-meteo.com/v1/search?name=' +
+      encodeURIComponent(q) + '&count=1&language=en&format=json';
+    fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.results || !data.results.length) {
+          toast('No match for that location.');
+          return;
+        }
+        var r = data.results[0];
+        var c = {
+          lat: r.latitude,
+          lon: r.longitude,
+          label: r.name + (r.admin1 ? ', ' + r.admin1 : '') + (r.country_code ? ', ' + r.country_code : ''),
+        };
+        saveWeatherCenter(c);
+        inp.value = '';
+        fetchWeather();
+        toast('Weather center: ' + c.label);
+      })
+      .catch(function () {
+        toast('Geocoding failed (network).');
+      });
+  };
 
   function renderApptQuick() {
     var host = document.getElementById('appt-quick');

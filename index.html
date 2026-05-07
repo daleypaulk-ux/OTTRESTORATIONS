@@ -97,8 +97,26 @@
           </div>
           <div class="grid">
             <div class="card" id="weather-card">
-              <h2>Weather</h2>
-              <div id="weather-body" class="muted">Loading…</div>
+              <div class="card-hd">
+                <h2>Weather</h2>
+                <button type="button" class="btn btn-sm btn-ghost" onclick="useMyWeatherLocation()" title="Use my current location">Use my location</button>
+              </div>
+              <div id="weather-summary" class="muted">Loading current conditions…</div>
+              <div class="weather-controls">
+                <input id="weather-search" type="search" placeholder="Set center: city, ZIP, address" autocomplete="off" />
+                <button type="button" class="btn btn-sm" onclick="searchWeatherLocation()">Set</button>
+              </div>
+              <span id="weather-center" class="weather-center"></span>
+
+              <div class="weather-section" id="weather-areas">
+                <h3>Areas to watch <span class="meta">Top 10 within 300 mi</span></h3>
+                <p class="disclaimer">Forecast-based estimate (precipitation + wind gusts, next 24&ndash;48h). Not an engineering assessment.</p>
+                <div id="weather-areas-body">
+                  <div class="skeleton"></div>
+                  <div class="skeleton" style="width:80%"></div>
+                  <div class="skeleton" style="width:90%"></div>
+                </div>
+              </div>
             </div>
             <div class="card">
               <h2>Quick Set Appointment</h2>
