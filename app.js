@@ -124,6 +124,9 @@
     activeChatChannel: 'posi',
     map: null,
     mapMarkers: [],
+    mapGeocoder: null,
+    mapSearchAutocomplete: null,
+    _mapPlaceSelecting: false,
     nightlyTimer: null,
     portalPreviewId: null,
   };
@@ -2296,11 +2299,20 @@
       '</p>' +
       '<ul class="map-fail-list">' +
       '<li>Use <strong>HTTPS</strong> (Netlify preview/production), not <code>file://</code>.</li>' +
-      '<li>Google Cloud: enable <strong>Maps JavaScript API</strong> and <strong>billing</strong> on the project.</li>' +
+      '<li>Google Cloud: enable <strong>Maps JavaScript API</strong>, <strong>Places API</strong> (autocomplete), <strong>Geocoding API</strong> (search &amp; ping placement), and <strong>billing</strong>.</li>' +
       '<li>API key: <strong>Application restrictions</strong> = HTTP referrers — add your site, e.g. <code>https://*.netlify.app/*</code> and <code>http://localhost:*/*</code> for local dev.</li>' +
-      '<li><strong>API restrictions</strong>: restrict to Google Maps APIs, or use &ldquo;Don&rsquo;t restrict&rdquo; while testing.</li>' +
+      '<li><strong>API restrictions</strong>: allow at least those three APIs (or &ldquo;Don&rsquo;t restrict&rdquo; while testing).</li>' +
       '</ul>' +
       '<p class="muted small">Paste the key in <strong>Settings</strong> &rarr; Google Maps JS API key, then reload this page.</p>' +
+      '</div>'
+    );
+  }
+
+  function mapLoadingHtml() {
+    return (
+      '<div class="map-loading" role="status" aria-live="polite">' +
+      '<div class="map-loading-spinner" aria-hidden="true"></div>' +
+      '<span>Loading map…</span>' +
       '</div>'
     );
   }
@@ -2309,12 +2321,11 @@
     var el = document.getElementById('gmap');
     if (!el) return;
     el.innerHTML = mapErrorHtml('Google Maps could not load', esc(msg));
-    renderPingList();
   }
 
   window.gm_authFailure = function () {
     showMapFailure(
-      'The Maps JavaScript API rejected your API key (auth failure). Check API key restrictions and that Maps JavaScript API is enabled with billing.'
+      'API key rejected. Enable Maps JavaScript API, Places API, and Geocoding API with billing; confirm HTTP referrer restrictions match this site.'
     );
   };
 
@@ -2328,7 +2339,6 @@
         'Open this app over HTTPS',
         'Google Maps does not work from a <code>file://</code> page. Deploy to Netlify (or use a local HTTPS server) and open the site URL there.'
       );
-      renderPingList();
       return;
     }
 
@@ -2337,7 +2347,6 @@
         'Add a Maps API key',
         'Save your key under <strong>Settings</strong> &rarr; <strong>Google Maps JS API key</strong>, then return to this view.'
       );
-      renderPingList();
       return;
     }
 
@@ -2353,6 +2362,8 @@
     if (document.querySelector('script[data-top-maps-api]')) {
       return;
     }
+
+    el.innerHTML = mapLoadingHtml();
 
     window.initTopGoogleMap = function () {
       if (!window.google || !window.google.maps) {
@@ -2373,12 +2384,78 @@
     s.src =
       'https://maps.googleapis.com/maps/api/js?key=' +
       encodeURIComponent(key) +
-      '&callback=' +
+      '&libraries=places&callback=' +
       encodeURIComponent('initTopGoogleMap');
     s.onerror = function () {
       showMapFailure('Network blocked the Maps script, or the URL is invalid.');
     };
     document.head.appendChild(s);
+  }
+
+  function focusMapOnGeometry(geometry) {
+    if (!geometry || !state.map) return;
+    if (geometry.viewport) {
+      state.map.fitBounds(geometry.viewport);
+      return;
+    }
+    if (geometry.location) {
+      state.map.panTo(geometry.location);
+      var z = state.map.getZoom();
+      if (!z || z < 14) {
+        state.map.setZoom(17);
+      }
+    }
+  }
+
+  function ensureMapSearchEnterHandler() {
+    var input = document.getElementById('map-search');
+    if (!input || input._topMapEnterWired) return;
+    input._topMapEnterWired = true;
+    input.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      setTimeout(function () {
+        if (state._mapPlaceSelecting) return;
+        window.lookupHail(input.value);
+      }, 200);
+    });
+  }
+
+  function wireMapPlacesAutocomplete() {
+    var input = document.getElementById('map-search');
+    if (!input || !state.map || !window.google || !google.maps || !google.maps.places) return;
+    ensureMapSearchEnterHandler();
+    if (!state.mapSearchAutocomplete) {
+      state.mapSearchAutocomplete = new google.maps.places.Autocomplete(input, {
+        fields: ['geometry', 'formatted_address', 'name'],
+        types: ['address'],
+      });
+      state.mapSearchAutocomplete.addListener('place_changed', function () {
+        state._mapPlaceSelecting = true;
+        var place = state.mapSearchAutocomplete.getPlace();
+        if (!place.geometry || !place.geometry.location) {
+          setTimeout(function () {
+            state._mapPlaceSelecting = false;
+          }, 200);
+          return;
+        }
+        focusMapOnGeometry(place.geometry);
+        toast(
+          'HailTrace integration: configure API key in Settings. Demo result for: ' +
+            (place.formatted_address || place.name || '')
+        );
+        setTimeout(function () {
+          state._mapPlaceSelecting = false;
+        }, 200);
+      });
+    }
+    if (state.mapSearchAutocomplete) {
+      try {
+        state.mapSearchAutocomplete.unbind('bounds');
+      } catch (e0) {}
+      try {
+        state.mapSearchAutocomplete.bindTo('bounds', state.map);
+      } catch (e1) {}
+    }
   }
 
   function setupGoogleMap() {
@@ -2404,45 +2481,86 @@
       });
       state.mapMarkers.push(marker);
     });
-    renderPingList();
-  }
-
-  function renderPingList() {
-    var ms = document.getElementById('map-search');
-    if (ms && !ms._wired) {
-      ms._wired = true;
-      ms.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') lookupHail(ms.value);
-      });
-    }
+    wireMapPlacesAutocomplete();
   }
 
   window.lookupHail = function (address) {
-    address = address || document.getElementById('map-search').value;
-    toast('HailTrace integration: configure API key in Settings. Demo result for: ' + address);
+    var input = document.getElementById('map-search');
+    var q =
+      address != null && String(address).trim() !== ''
+        ? String(address).trim()
+        : input && input.value
+          ? input.value.trim()
+          : '';
+    if (!q) {
+      toast('Enter an address to search.');
+      return;
+    }
+    if (!window.google || !google.maps) {
+      toast('Map is still loading.');
+      return;
+    }
+    var geocoder = state.mapGeocoder || (state.mapGeocoder = new google.maps.Geocoder());
+    geocoder.geocode({ address: q }, function (results, status) {
+      if (status !== 'OK' || !results[0]) {
+        toast('Address not found. Try a fuller street address.');
+        return;
+      }
+      var r = results[0];
+      if (state.map) {
+        focusMapOnGeometry(r.geometry);
+      }
+      toast(
+        'HailTrace integration: configure API key in Settings. Demo result for: ' + (r.formatted_address || q)
+      );
+    });
   };
 
   window.addPingHere = function () {
-    var addr = prompt('Address for ping (deduped):') || '';
-    addr = addr.trim().toLowerCase();
-    if (!addr) return;
-    var exists = state.pings.some(function (p) {
-      return (p.address || '').toLowerCase() === addr;
-    });
-    if (exists) {
+    var raw = (prompt('Address for ping (deduped):') || '').trim();
+    if (!raw) return;
+    var rawLower = raw.toLowerCase();
+    if (
+      state.pings.some(function (p) {
+        return (p.address || '').toLowerCase() === rawLower;
+      })
+    ) {
       toast('Only one ping per address (spec).');
       return;
     }
-    state.pings.push({
-      id: uid(),
-      address: addr,
-      lat: state.settings.lat + (Math.random() - 0.5) * 0.05,
-      lng: state.settings.lon + (Math.random() - 0.5) * 0.05,
-      ts: new Date().toISOString(),
+    if (!window.google || !google.maps) {
+      toast('Open the Door Knock Map and wait for the map to finish loading.');
+      return;
+    }
+    var geocoder = state.mapGeocoder || (state.mapGeocoder = new google.maps.Geocoder());
+    geocoder.geocode({ address: raw }, function (results, status) {
+      if (status !== 'OK' || !results[0]) {
+        toast('Could not find that address. Try a fuller street address.');
+        return;
+      }
+      var r = results[0];
+      var loc = r.geometry.location;
+      var formatted = (r.formatted_address || raw).trim();
+      var dedup = formatted.toLowerCase();
+      if (
+        state.pings.some(function (p) {
+          return (p.address || '').toLowerCase() === dedup;
+        })
+      ) {
+        toast('Only one ping per address (spec).');
+        return;
+      }
+      state.pings.push({
+        id: uid(),
+        address: formatted,
+        lat: typeof loc.lat === 'function' ? loc.lat() : loc.lat,
+        lng: typeof loc.lng === 'function' ? loc.lng() : loc.lng,
+        ts: new Date().toISOString(),
+      });
+      persistPings();
+      initMapLazy();
+      toast('Ping added');
     });
-    persistPings();
-    initMapLazy();
-    toast('Ping added');
   };
 
   window.aiAnalyzeMock = function () {
@@ -2697,7 +2815,7 @@
       '<div class="field"><label>Google Maps JS API key</label><input id="set-maps" value="' +
       escAttr(state.settings.googleMapsKey || '') +
       '" autocomplete="off" spellcheck="false"/>' +
-      '<p class="muted small" style="margin-top:6px">Enable <strong>Maps JavaScript API</strong> + billing in Google Cloud. Under key restrictions, add HTTP referrers for your live domain (e.g. <code>https://*.netlify.app/*</code>).</p></div>' +
+      '<p class="muted small" style="margin-top:6px">In Google Cloud: enable <strong>Maps JavaScript API</strong>, <strong>Places API</strong> (address autocomplete), and <strong>Geocoding API</strong> (search / ping geocoding), with billing. Key restrictions: HTTP referrers for your domain (e.g. <code>https://*.netlify.app/*</code>) and API restriction including those three (or unrestricted while testing).</p></div>' +
       '<div class="field"><label>HailTrace API key</label><input id="set-hail" value="' +
       escAttr(state.settings.hailtraceKey || '') +
       '"/></div>' +

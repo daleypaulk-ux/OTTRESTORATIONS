@@ -240,7 +240,8 @@
             <div id="gmap"></div>
             <div class="map-overlay">
               <div class="map-search">
-                <input id="map-search" type="search" placeholder="Search address (with last hail date lookup)…" />
+                <input id="map-search" type="search" placeholder="Search address (with last hail date lookup)…" autocomplete="off" />
+                <button type="button" class="btn btn-sm map-search-go" onclick="lookupHail()" aria-label="Search address on map">Go</button>
               </div>
               <button class="btn" onclick="addPingHere()">Drop Ping</button>
             </div>

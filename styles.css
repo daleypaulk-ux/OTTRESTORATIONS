@@ -944,8 +944,49 @@ table.tbl tbody tr:hover td { background: var(--red-soft); cursor: pointer; }
   display: flex; gap: var(--space-2); pointer-events: none;
 }
 .map-overlay > * { pointer-events: auto; }
-.map-search { flex: 1; max-width: 460px; }
+.map-search {
+  flex: 1;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.map-search-go {
+  flex-shrink: 0;
+  box-shadow: var(--shadow-md);
+}
+.map-loading {
+  height: 100%;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.map-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--red);
+  border-radius: 50%;
+  animation: map-spin 0.75s linear infinite;
+}
+@keyframes map-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-loading-spinner {
+    animation: none;
+    border-top-color: var(--muted-2);
+  }
+}
 .map-search input {
+  flex: 1;
+  min-width: 0;
   background: var(--surface);
   box-shadow: var(--shadow-md);
   border-color: transparent;
