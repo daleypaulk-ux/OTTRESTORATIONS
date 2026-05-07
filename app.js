@@ -1968,27 +1968,98 @@
       '</div>';
   }
 
-  function initMapLazy() {
-    var key = state.settings.googleMapsKey;
+  function mapErrorHtml(title, details) {
+    return (
+      '<div class="map-fail">' +
+      '<p class="map-fail-title">' +
+      esc(title) +
+      '</p>' +
+      '<p class="map-fail-body">' +
+      (details || '') +
+      '</p>' +
+      '<ul class="map-fail-list">' +
+      '<li>Use <strong>HTTPS</strong> (Netlify preview/production), not <code>file://</code>.</li>' +
+      '<li>Google Cloud: enable <strong>Maps JavaScript API</strong> and <strong>billing</strong> on the project.</li>' +
+      '<li>API key: <strong>Application restrictions</strong> = HTTP referrers — add your site, e.g. <code>https://*.netlify.app/*</code> and <code>http://localhost:*/*</code> for local dev.</li>' +
+      '<li><strong>API restrictions</strong>: restrict to Google Maps APIs, or use &ldquo;Don&rsquo;t restrict&rdquo; while testing.</li>' +
+      '</ul>' +
+      '<p class="muted small">Paste the key in <strong>Settings</strong> &rarr; Google Maps JS API key, then reload this page.</p>' +
+      '</div>'
+    );
+  }
+
+  function showMapFailure(msg) {
     var el = document.getElementById('gmap');
-    if (!key) {
-      el.innerHTML =
-        '<div style="display:grid;place-items:center;height:100%;padding:24px;text-align:center;color:#555">' +
-        '<div><strong>Maps need HTTPS + API key.</strong><br/>Add Google Maps JS API key in Settings.<br/>' +
-        '<span class="muted small">Pings &amp; hail lookup still work in list form below.</span></div></div>';
+    if (!el) return;
+    el.innerHTML = mapErrorHtml('Google Maps could not load', esc(msg));
+    renderPingList();
+  }
+
+  window.gm_authFailure = function () {
+    showMapFailure(
+      'The Maps JavaScript API rejected your API key (auth failure). Check API key restrictions and that Maps JavaScript API is enabled with billing.'
+    );
+  };
+
+  function initMapLazy() {
+    var key = (state.settings.googleMapsKey || '').trim();
+    var el = document.getElementById('gmap');
+    if (!el) return;
+
+    if (location.protocol === 'file:') {
+      el.innerHTML = mapErrorHtml(
+        'Open this app over HTTPS',
+        'Google Maps does not work from a <code>file://</code> page. Deploy to Netlify (or use a local HTTPS server) and open the site URL there.'
+      );
       renderPingList();
       return;
     }
-    if (window.google && window.google.maps) {
-      setupGoogleMap();
+
+    if (!key) {
+      el.innerHTML = mapErrorHtml(
+        'Add a Maps API key',
+        'Save your key under <strong>Settings</strong> &rarr; <strong>Google Maps JS API key</strong>, then return to this view.'
+      );
+      renderPingList();
       return;
     }
+
+    if (window.google && window.google.maps) {
+      try {
+        setupGoogleMap();
+      } catch (e) {
+        showMapFailure(e && e.message ? e.message : String(e));
+      }
+      return;
+    }
+
+    if (document.querySelector('script[data-top-maps-api]')) {
+      return;
+    }
+
+    window.initTopGoogleMap = function () {
+      if (!window.google || !window.google.maps) {
+        showMapFailure('Google Maps global object missing after load.');
+        return;
+      }
+      try {
+        setupGoogleMap();
+      } catch (e) {
+        showMapFailure(e && e.message ? e.message : String(e));
+      }
+    };
+
     var s = document.createElement('script');
-    s.src =
-      'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(key) + '&libraries=places';
+    s.setAttribute('data-top-maps-api', '1');
     s.async = true;
-    s.onload = function () {
-      setupGoogleMap();
+    s.defer = true;
+    s.src =
+      'https://maps.googleapis.com/maps/api/js?key=' +
+      encodeURIComponent(key) +
+      '&callback=' +
+      encodeURIComponent('initTopGoogleMap');
+    s.onerror = function () {
+      showMapFailure('Network blocked the Maps script, or the URL is invalid.');
     };
     document.head.appendChild(s);
   }
@@ -1997,7 +2068,13 @@
     var el = document.getElementById('gmap');
     el.innerHTML = '';
     var center = { lat: state.settings.lat, lng: state.settings.lon };
-    state.map = new google.maps.Map(el, { center: center, zoom: 11 });
+    state.map = new google.maps.Map(el, {
+      center: center,
+      zoom: 11,
+      mapTypeControl: false,
+      streetViewControl: false,
+      fullscreenControl: true,
+    });
     state.mapMarkers.forEach(function (m) {
       m.setMap(null);
     });
@@ -2265,7 +2342,8 @@
       '<h3>Integrations</h3>' +
       '<div class="field"><label>Google Maps JS API key</label><input id="set-maps" value="' +
       escAttr(state.settings.googleMapsKey || '') +
-      '"/></div>' +
+      '" autocomplete="off" spellcheck="false"/>' +
+      '<p class="muted small" style="margin-top:6px">Enable <strong>Maps JavaScript API</strong> + billing in Google Cloud. Under key restrictions, add HTTP referrers for your live domain (e.g. <code>https://*.netlify.app/*</code>).</p></div>' +
       '<div class="field"><label>HailTrace API key</label><input id="set-hail" value="' +
       escAttr(state.settings.hailtraceKey || '') +
       '"/></div>' +
