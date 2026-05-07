@@ -509,6 +509,7 @@
     }
     if (v === 'slip') autoOpenJotForm('insuranceSlip');
     if (v === 'swag') autoOpenJotForm('orderForm');
+    if (v === 'home') renderHomeAppointments();
   }
 
   // Open a JotForm modal once per navigation. Skips if the modal is already
@@ -679,6 +680,62 @@
   function renderHomeWidgets() {
     fetchWeather();
     renderTodo();
+    renderHomeAppointments();
+  }
+
+  // Appointments visible to the logged-in rep (or all for owner/admin).
+  function appointmentsForCurrentUser() {
+    var u = getUser();
+    if (!u || u.role === 'homeowner') return [];
+    var email = u.email || '';
+    if (u.role === 'owner' || u.role === 'admin') return state.appts.slice();
+    return state.appts.filter(function (a) {
+      return a.rep === email;
+    });
+  }
+
+  function renderHomeAppointments() {
+    var host = document.getElementById('home-appts');
+    if (!host) return;
+    var u = getUser();
+    if (!u || u.role === 'homeowner') {
+      host.innerHTML = '';
+      return;
+    }
+    var startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    var rows = appointmentsForCurrentUser()
+      .filter(function (a) {
+        return !a.completed;
+      })
+      .filter(function (a) {
+        return new Date(a.when).getTime() >= startOfToday.getTime();
+      })
+      .sort(function (a, b) {
+        return new Date(a.when) - new Date(b.when);
+      })
+      .slice(0, 25);
+    if (!rows.length) {
+      host.innerHTML =
+        '<p class="muted" style="margin:0">No appointments scheduled from today forward. Save one from Quick Set or Appointment Setter.</p>';
+      return;
+    }
+    host.innerHTML =
+      '<table class="tbl"><thead><tr><th>When</th><th>Customer</th><th>Address</th></tr></thead><tbody>' +
+      rows
+        .map(function (a) {
+          return (
+            '<tr><td>' +
+            esc(new Date(a.when).toLocaleString()) +
+            '</td><td>' +
+            esc(a.name) +
+            '</td><td>' +
+            esc(a.addr) +
+            '</td></tr>'
+          );
+        })
+        .join('') +
+      '</tbody></table>';
   }
 
   /* ------------------------------------------------------------
@@ -1053,6 +1110,26 @@
     };
   }
 
+  function commitAppointmentRecord(f, rainPct, weatherOk) {
+    var dt = new Date(f.date + 'T' + f.time + ':00');
+    var u = getUser();
+    state.appts.push({
+      id: uid(),
+      name: formatLF(f.name),
+      addr: f.addr,
+      phone: f.phone,
+      when: dt.toISOString(),
+      rep: u && u.email ? u.email : '',
+      completed: false,
+      missedNotified: false,
+      rainPctSnapshot: typeof rainPct === 'number' ? rainPct : null,
+      weatherOk: !!weatherOk,
+    });
+    persistAppts();
+    renderBoards();
+    renderHomeAppointments();
+  }
+
   // Look up rain probability via Open-Meteo, then persist the appointment.
   // Shared by both quick (Home) and dedicated (Appointment Setter) saves.
   function persistAppointmentFromFields(f) {
@@ -1071,7 +1148,10 @@
       lon +
       '&hourly=precipitation_probability&temperature_unit=fahrenheit';
     fetch(url)
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('weather http');
+        return r.json();
+      })
       .then(function (d) {
         var times = d.hourly && d.hourly.time;
         var probs = d.hourly && d.hourly.precipitation_probability;
@@ -1080,7 +1160,10 @@
           for (var i = 0; i < times.length; i++) {
             if (times[i].indexOf(f.date) !== -1) {
               var hh = parseInt(times[i].slice(11, 13), 10);
-              if (hh === hourIdx) { rain = probs[i] || 0; break; }
+              if (hh === hourIdx) {
+                rain = probs[i] || 0;
+                break;
+              }
             }
           }
         }
@@ -1088,23 +1171,12 @@
           toast('Rain chance ' + rain + '% — appointment blocked (>70%). Pick another time.');
           return;
         }
-        var u = getUser();
-        state.appts.push({
-          id: uid(),
-          name: formatLF(f.name),
-          addr: f.addr,
-          phone: f.phone,
-          when: dt.toISOString(),
-          rep: u && u.email ? u.email : '',
-          completed: false,
-          missedNotified: false,
-        });
-        persistAppts();
+        commitAppointmentRecord(f, rain, true);
         toast('Appointment saved. Rain chance ~' + rain + '%.');
-        renderBoards();
       })
       .catch(function () {
-        toast('Weather check failed — appointment not saved.');
+        commitAppointmentRecord(f, null, false);
+        toast('Appointment saved. Weather check unavailable — review forecast manually.');
       });
   }
 
@@ -1939,50 +2011,59 @@
     var host = document.getElementById('boards-body');
     if (!host) return;
     var u = getUser();
-    var email = u && u.email ? u.email : '';
+    if (!u || u.role === 'homeowner') {
+      host.innerHTML = '<div class="empty">Sign in as a team member to view boards.</div>';
+      return;
+    }
+    var email = u.email || '';
     var leads =
       u.role === 'owner' || u.role === 'admin'
         ? state.leads
         : state.leads.filter(function (l) {
             return l.rep === email;
           });
-    var appts =
-      u.role === 'owner' || u.role === 'admin'
-        ? state.appts
-        : state.appts.filter(function (a) {
-            return a.rep === email;
-          });
+    var appts = appointmentsForCurrentUser().sort(function (a, b) {
+      return new Date(a.when) - new Date(b.when);
+    });
+    var apptRows =
+      appts.length > 0
+        ? appts
+            .map(function (a) {
+              return (
+                '<tr><td>' +
+                esc(new Date(a.when).toLocaleString()) +
+                '</td><td>' +
+                esc(a.name) +
+                '</td><td>' +
+                esc(a.addr) +
+                '</td></tr>'
+              );
+            })
+            .join('')
+        : '<tr><td colspan="3" class="muted">No appointments yet — use Home or Appointment Setter.</td></tr>';
+    var leadCards =
+      leads.length > 0
+        ? leads
+            .map(function (l) {
+              return (
+                '<div class="card"><h3>' +
+                esc(formatLF(l.name)) +
+                '</h3><p class="muted">Stage ' +
+                l.stage +
+                '</p><button class="btn btn-sm" onclick="openCustomer(\'' +
+                l.id +
+                "')\">Open</button></div>"
+              );
+            })
+            .join('')
+        : '<div class="card"><p class="muted" style="margin:0">No leads assigned — import or add customers.</p></div>';
     host.innerHTML =
       '<div class="grid">' +
-      leads
-        .map(function (l) {
-          return (
-            '<div class="card"><h3>' +
-            esc(formatLF(l.name)) +
-            '</h3><p class="muted">Stage ' +
-            l.stage +
-            '</p><button class="btn btn-sm" onclick="openCustomer(\'' +
-            l.id +
-            "')\">Open</button></div>"
-          );
-        })
-        .join('') +
+      leadCards +
       '</div>' +
       '<h2 style="margin-top:18px;font-family:Times New Roman,serif">Appointments</h2>' +
       '<table class="tbl"><thead><tr><th>When</th><th>Customer</th><th>Address</th></tr></thead><tbody>' +
-      appts
-        .map(function (a) {
-          return (
-            '<tr><td>' +
-            esc(new Date(a.when).toLocaleString()) +
-            '</td><td>' +
-            esc(a.name) +
-            '</td><td>' +
-            esc(a.addr) +
-            '</td></tr>'
-          );
-        })
-        .join('') +
+      apptRows +
       '</tbody></table>';
   }
 
