@@ -145,6 +145,62 @@
     localStorage.setItem(key, JSON.stringify(val));
   }
 
+  /** Fetch with timeout so slow networks cannot stall saves indefinitely. */
+  function fetchWithTimeout(url, ms) {
+    ms = ms || 8000;
+    if (typeof AbortController === 'undefined') {
+      return fetch(url);
+    }
+    var ctrl = new AbortController();
+    var tid = setTimeout(function () {
+      ctrl.abort();
+    }, ms);
+    return fetch(url, { signal: ctrl.signal }).finally(function () {
+      clearTimeout(tid);
+    });
+  }
+
+  /** Normalize HH:mm from input type="time" across browsers; pads hours if needed. */
+  function normalizeTimeHM(s) {
+    s = String(s == null ? '' : s).trim();
+    if (!s) return '09:00';
+    var parts = s.split(':');
+    var h = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    h = Math.max(0, Math.min(23, h));
+    m = Math.max(0, Math.min(59, m));
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+
+  /** Local appointment instant; returns null if invalid (avoids RangeError on toISOString). */
+  function parseAppointmentWhen(f) {
+    var dateStr = (f.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+    var tm = normalizeTimeHM(f.time);
+    if (!tm) return null;
+    var d = new Date(dateStr + 'T' + tm + ':00');
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function rainPctAtHour(forecastJson, dateStr, hourIdx) {
+    var times = forecastJson.hourly && forecastJson.hourly.time;
+    var probs = forecastJson.hourly && forecastJson.hourly.precipitation_probability;
+    var rain = 0;
+    if (times && probs) {
+      for (var i = 0; i < times.length; i++) {
+        if (times[i].indexOf(dateStr) !== -1) {
+          var hh = parseInt(times[i].slice(11, 13), 10);
+          if (hh === hourIdx) {
+            rain = probs[i] || 0;
+            break;
+          }
+        }
+      }
+    }
+    return rain;
+  }
+
   function migrate() {
     var meta = loadJSON(KEYS.meta, { v: 1 });
     if (!meta.v) meta.v = 1;
@@ -354,7 +410,13 @@
     saveJSON(KEYS.pings, state.pings);
   }
   function persistAppts() {
-    saveJSON(KEYS.appts, state.appts);
+    try {
+      saveJSON(KEYS.appts, state.appts);
+      return true;
+    } catch (e) {
+      toast('Could not save appointments (browser storage full or blocked).');
+      return false;
+    }
   }
   function persistTodos() {
     saveJSON(KEYS.todos, state.todos);
@@ -1110,10 +1172,15 @@
   }
 
   function commitAppointmentRecord(f, rainPct, weatherOk) {
-    var dt = new Date(f.date + 'T' + f.time + ':00');
+    var dt = parseAppointmentWhen(f);
+    if (!dt) {
+      toast('Invalid date or time — use the date and time fields.');
+      return null;
+    }
     var u = getUser();
-    state.appts.push({
-      id: uid(),
+    var id = uid();
+    var rec = {
+      id: id,
       name: formatLF(f.name),
       addr: f.addr,
       phone: f.phone,
@@ -1123,56 +1190,66 @@
       missedNotified: false,
       rainPctSnapshot: typeof rainPct === 'number' ? rainPct : null,
       weatherOk: !!weatherOk,
-    });
-    persistAppts();
+    };
+    state.appts.push(rec);
+    if (!persistAppts()) {
+      state.appts.pop();
+      return null;
+    }
     renderBoards();
     renderHomeAppointments();
+    return id;
   }
 
-  // Fetches Open-Meteo precipitation probability at the appointment hour for the
-  // snapshot/toast only — scheduling is never blocked by rain.
-  function persistAppointmentFromFields(f) {
-    if (!f.name || !f.addr || !f.date) {
-      toast('Name, address, and date are required.');
-      return;
-    }
-    var lat = state.settings.lat;
-    var lon = state.settings.lon;
-    var dt = new Date(f.date + 'T' + f.time + ':00');
+  // Optional: Open-Meteo fetch runs after save (non-blocking) so a slow or
+  // blocked network never prevents the appointment from being stored.
+  function attachWeatherSnapshotToAppointment(apptId, f) {
+    if (!apptId) return;
+    var lat = Number(state.settings.lat);
+    var lon = Number(state.settings.lon);
+    if (isNaN(lat) || isNaN(lon)) return;
+    var dt = parseAppointmentWhen(f);
+    if (!dt) return;
     var hourIdx = dt.getHours();
+    var dateStr = (f.date || '').trim();
     var url =
       'https://api.open-meteo.com/v1/forecast?latitude=' +
       lat +
       '&longitude=' +
       lon +
       '&hourly=precipitation_probability&temperature_unit=fahrenheit';
-    fetch(url)
+    fetchWithTimeout(url, 8000)
       .then(function (r) {
         if (!r.ok) throw new Error('weather http');
         return r.json();
       })
       .then(function (d) {
-        var times = d.hourly && d.hourly.time;
-        var probs = d.hourly && d.hourly.precipitation_probability;
-        var rain = 0;
-        if (times && probs) {
-          for (var i = 0; i < times.length; i++) {
-            if (times[i].indexOf(f.date) !== -1) {
-              var hh = parseInt(times[i].slice(11, 13), 10);
-              if (hh === hourIdx) {
-                rain = probs[i] || 0;
-                break;
-              }
-            }
-          }
+        var rain = rainPctAtHour(d, dateStr, hourIdx);
+        var a = state.appts.find(function (x) {
+          return x.id === apptId;
+        });
+        if (!a) return;
+        a.rainPctSnapshot = rain;
+        a.weatherOk = true;
+        if (persistAppts()) {
+          renderBoards();
+          renderHomeAppointments();
         }
-        commitAppointmentRecord(f, rain, true);
-        toast('Appointment saved. Rain chance ~' + rain + '% at appointment hour.');
       })
       .catch(function () {
-        commitAppointmentRecord(f, null, false);
-        toast('Appointment saved. Weather check unavailable — review forecast manually.');
+        /* optional metadata only */
       });
+  }
+
+  function persistAppointmentFromFields(f) {
+    if (!f.name || !f.addr || !f.date) {
+      toast('Name, address, and date are required.');
+      return;
+    }
+    var id = commitAppointmentRecord(f, null, false);
+    if (!id) return;
+    toast('Appointment saved.');
+    attachWeatherSnapshotToAppointment(id, f);
   }
 
   window.scheduleQuickAppt = function () {
