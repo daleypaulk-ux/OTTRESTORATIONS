@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#E8281E" />
+  <title>T.O.P. — Total Operations Platform</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23E8281E'/%3E%3Ctext x='50%25' y='58%25' font-family='Times New Roman' font-weight='700' font-size='28' fill='white' text-anchor='middle'%3ETOP%3C/text%3E%3C/svg%3E" />
+  <script src="https://cdn.jotfor.ms/s/umd/latest/for-form-embed-handler.js" defer></script>
+</head>
+<body>
+
+  <!-- ============================================================
+       LOGIN SCREEN
+       ============================================================ -->
+  <section id="login-screen" class="login">
+    <form class="login-card" onsubmit="event.preventDefault(); doLogin();">
+      <div class="login-brand">
+        <div class="logo-big">TOP</div>
+        <h1>T.O.P.</h1>
+        <p>Total Operations Platform</p>
+      </div>
+      <div id="login-error" class="error hidden"></div>
+      <div class="field">
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" required />
+      </div>
+      <div class="field">
+        <label for="login-pass">Password</label>
+        <input id="login-pass" type="password" autocomplete="current-password" required />
+      </div>
+      <div class="field-row" style="margin-bottom:14px;">
+        <label class="checkbox">
+          <input id="login-remember" type="checkbox" checked /> Remember me
+        </label>
+        <a href="#" class="small" onclick="event.preventDefault(); alert('Password reset is admin-managed in MVP. Contact your office admin.');">Forgot?</a>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+      <div class="demo-creds">
+        <strong>Demo accounts</strong> &nbsp; (seeded on first run)<br/>
+        Owner: <code>kyle.smith@ottrestoration.com</code> / <code>Delayne.10</code><br/>
+        Admin: <code>brandon@ottrestoration.com</code> / <code>admin123</code><br/>
+        Rep: <code>rep@ottrestoration.com</code> / <code>rep123</code>
+      </div>
+    </form>
+  </section>
+
+  <!-- ============================================================
+       APP SHELL
+       ============================================================ -->
+  <div id="app" class="hidden">
+
+    <header class="top-bar">
+      <div class="brand">
+        <span class="logo">TOP</span>
+        <span>T.O.P.</span>
+      </div>
+      <div class="global-search">
+        <input id="global-search" type="search" placeholder="Search customers, addresses, jobs, reps…" />
+      </div>
+      <div class="spacer"></div>
+      <button class="icon-btn" title="Notifications" onclick="openNotifications()">&#x1F514;</button>
+      <div class="user-chip" id="user-chip" onclick="openProfile()">
+        <span class="avatar" id="user-avatar">?</span>
+        <span id="user-name" class="small">…</span>
+      </div>
+      <button id="smenu-toggle" class="icon-btn" title="Menu" aria-label="Menu" onclick="toggleSmenu()">&#x2630;</button>
+    </header>
+
+    <!-- Side menu (id MUST be smenu — non-negotiable rule from handoff) -->
+    <aside id="smenu" class="smenu" role="navigation" aria-label="Primary">
+      <div class="smenu-head">
+        <span>Navigation</span>
+        <button class="close icon-btn" aria-label="Close menu" onclick="toggleSmenu(false)">&times;</button>
+      </div>
+      <ul class="smenu-list" id="smenu-list">
+        <!-- populated by app.js -->
+      </ul>
+      <div class="smenu-foot">
+        <button class="btn btn-block" onclick="doLogout()">Sign out</button>
+      </div>
+    </aside>
+    <div id="scrim" class="scrim" onclick="toggleSmenu(false)"></div>
+
+    <!-- ============================================================
+         VIEWS — every view is .cv with id cv-{key}
+         ============================================================ -->
+
+    <main>
+      <!-- Home -->
+      <section id="cv-home" class="cv on">
+        <div class="page">
+          <div class="page-head">
+            <h1>Home</h1>
+            <span class="muted small" id="home-greeting"></span>
+          </div>
+          <div class="grid">
+            <div class="card" id="weather-card">
+              <h2>Weather</h2>
+              <div id="weather-body" class="muted">Loading…</div>
+            </div>
+            <div class="card">
+              <h2>Quick Set Appointment</h2>
+              <div id="appt-quick"></div>
+            </div>
+            <div class="card">
+              <h2>Today's To-Do</h2>
+              <div id="todo-list"></div>
+            </div>
+          </div>
+
+          <div class="grid-2" style="margin-top:16px;">
+            <div class="card">
+              <h2>Leaderboard</h2>
+              <div id="leaderboard"></div>
+            </div>
+            <div class="card">
+              <h2>Team Totals</h2>
+              <div id="team-totals"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Appointment Setter -->
+      <section id="cv-appointments" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Appointment Setter</h1></div>
+          <div class="card">
+            <p class="muted">Quick form: only Name, Address, Time, Date, Phone (per spec). For the full JotForm version, click below.</p>
+            <div id="appt-form"></div>
+            <div class="divider"></div>
+            <button class="btn btn-primary" onclick="openJotForm('appointmentSetter')">Open JotForm: Appointment Setter</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Insurance Permission Slip -->
+      <section id="cv-slip" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Insurance Permission Slip</h1></div>
+          <div class="card">
+            <p class="muted">Legally binding e-signature with timestamp. Opens in full-screen JotForm.</p>
+            <button class="btn btn-primary" onclick="openJotForm('insuranceSlip')">Open JotForm: Insurance Contingency Slip</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Customers -->
+      <section id="cv-customers" class="cv">
+        <div class="page">
+          <div class="page-head">
+            <h1>Customers</h1>
+            <button class="btn btn-primary" onclick="openCustomerNew()">+ New Customer</button>
+            <button class="btn" onclick="openCsvImport()">Import CSV</button>
+            <input id="customers-search" type="search" placeholder="Search customers…" style="max-width:280px;" />
+          </div>
+          <div id="customers-table"></div>
+        </div>
+      </section>
+
+      <!-- Customer Detail (one shared view) -->
+      <section id="cv-customer" class="cv">
+        <div class="page" id="customer-detail">
+          <!-- rendered by app.js -->
+        </div>
+      </section>
+
+      <!-- Homeowner Portal -->
+      <section id="cv-portal" class="cv">
+        <div class="page" id="homeowner-portal">
+          <!-- rendered by app.js -->
+        </div>
+      </section>
+
+      <!-- Boards -->
+      <section id="cv-boards" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Boards</h1></div>
+          <div id="boards-body"></div>
+        </div>
+      </section>
+
+      <!-- Team Chat -->
+      <section id="cv-chat" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Team Chat</h1></div>
+          <div class="chat-wrap">
+            <div class="chat-channels" id="chat-channels"></div>
+            <div class="chat-main">
+              <div class="chat-stream" id="chat-stream"></div>
+              <form class="chat-input" onsubmit="event.preventDefault(); sendChat();">
+                <input id="chat-input" placeholder="Message #channel…" />
+                <button class="btn btn-primary">Send</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Door Knock Map -->
+      <section id="cv-map" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Door Knock Map</h1></div>
+          <div class="map-wrap">
+            <div id="gmap"></div>
+            <div class="map-overlay">
+              <div class="map-search">
+                <input id="map-search" type="search" placeholder="Search address (with last hail date lookup)…" />
+              </div>
+              <button class="btn" onclick="addPingHere()">Drop Ping</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Jobs & Orders -->
+      <section id="cv-jobs" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Jobs &amp; Orders</h1></div>
+          <div id="jobs-body"></div>
+        </div>
+      </section>
+
+      <!-- AI Analyzer -->
+      <section id="cv-ai" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>AI Scope Analyzer</h1></div>
+          <div class="card">
+            <p class="muted">Upload (or paste) the insurance scope. Claude parses line items into a structured material order with code-flag suggestions.</p>
+            <label>Scope text</label>
+            <textarea id="ai-scope-text" rows="10" placeholder="Paste the carrier scope here…"></textarea>
+            <div class="flex" style="margin-top:10px;">
+              <button class="btn btn-primary" onclick="aiAnalyzeScope()">Analyze with Claude</button>
+              <button class="btn" onclick="aiAnalyzeMock()">Use Demo Result (no API)</button>
+              <span class="spacer"></span>
+              <span class="muted small">Phase 2: backend proxy for the API key.</span>
+            </div>
+            <div id="ai-result" style="margin-top:14px;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Automations -->
+      <section id="cv-automations" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Automations</h1></div>
+          <div id="automations-body"></div>
+        </div>
+      </section>
+
+      <!-- Subcontractor Portal -->
+      <section id="cv-subs" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Subcontractor Portal</h1></div>
+          <div id="subs-body"></div>
+        </div>
+      </section>
+
+      <!-- Invoicing -->
+      <section id="cv-invoices" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Invoicing</h1></div>
+          <div id="invoices-body"></div>
+        </div>
+      </section>
+
+      <!-- Rep Pay -->
+      <section id="cv-pay" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Rep Pay</h1></div>
+          <div id="pay-body"></div>
+        </div>
+      </section>
+
+      <!-- Swag -->
+      <section id="cv-swag" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Swag &amp; Orders</h1></div>
+          <div class="card">
+            <p class="muted">Order shirts, signs, folders, and other company swag.</p>
+            <button class="btn btn-primary" onclick="openJotForm('orderForm')">Open Order Form</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section id="cv-settings" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Settings</h1></div>
+          <div id="settings-body"></div>
+        </div>
+      </section>
+
+      <!-- Admin -->
+      <section id="cv-admin" class="cv">
+        <div class="page">
+          <div class="page-head"><h1>Admin</h1></div>
+          <div id="admin-body"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom mobile nav -->
+    <nav class="bottom-nav">
+      <button onclick="topNav('home')" data-bnav="home">
+        <span class="ico">&#x1F3E0;</span><span>Home</span>
+      </button>
+      <button onclick="topNav('customers')" data-bnav="customers">
+        <span class="ico">&#x1F4CB;</span><span>Leads</span>
+      </button>
+      <button onclick="topNav('jobs')" data-bnav="jobs">
+        <span class="ico">&#x1F528;</span><span>Jobs</span>
+      </button>
+      <button onclick="topNav('ai')" data-bnav="ai">
+        <span class="ico">&#x2728;</span><span>AI</span>
+      </button>
+      <button onclick="topNav('portal')" data-bnav="portal">
+        <span class="ico">&#x1F465;</span><span>Portal</span>
+      </button>
+      <button onclick="topNav('map')" data-bnav="map">
+        <span class="ico">&#x1F5FA;</span><span>Map</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ============================================================
+       SHARED MODALS
+       ============================================================ -->
+
+  <!-- JotForm full-screen modal -->
+  <div id="jotform-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="jotform-title">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <button class="back" onclick="closeJotForm()" aria-label="Back">&larr;</button>
+        <h2 id="jotform-title">Form</h2>
+        <a id="jotform-fallback" class="fallback" target="_blank" rel="noopener">Open in browser</a>
+        <button class="close" onclick="closeJotForm()" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <iframe id="jotform-iframe" title="JotForm"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic centered modal -->
+  <div id="modal" class="modal centered" role="dialog" aria-modal="true">
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="modal-title">Modal</h2>
+        <button class="close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body" style="padding:16px;"></div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="toast-wrap" id="toast-wrap"></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
