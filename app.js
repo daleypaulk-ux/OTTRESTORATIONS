@@ -160,6 +160,18 @@
     });
   }
 
+  function pad2(n) {
+    n = Number(n);
+    return (n >= 0 && n < 10 ? '0' : '') + n;
+  }
+
+  /** Tomorrow (or +delta days) as yyyy-mm-dd in **local** calendar — avoids UTC skew from toISOString(). */
+  function localDatePlusDays(delta) {
+    var x = new Date();
+    x.setDate(x.getDate() + (delta || 0));
+    return x.getFullYear() + '-' + pad2(x.getMonth() + 1) + '-' + pad2(x.getDate());
+  }
+
   /** Normalize HH:mm from input type="time" across browsers; pads hours if needed. */
   function normalizeTimeHM(s) {
     s = String(s == null ? '' : s).trim();
@@ -170,17 +182,43 @@
     if (isNaN(h) || isNaN(m)) return null;
     h = Math.max(0, Math.min(23, h));
     m = Math.max(0, Math.min(59, m));
-    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    return pad2(h) + ':' + pad2(m);
   }
 
-  /** Local appointment instant; returns null if invalid (avoids RangeError on toISOString). */
+  /**
+   * Build a **local** Date for the appointment (no UTC shift). Accepts:
+   * - input type=date value: yyyy-mm-dd
+   * - common US entry: m/d/yyyy or mm/dd/yyyy
+   */
   function parseAppointmentWhen(f) {
-    var dateStr = (f.date || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+    var raw = (f.date || '').trim();
     var tm = normalizeTimeHM(f.time);
     if (!tm) return null;
-    var d = new Date(dateStr + 'T' + tm + ':00');
+    var hp = tm.split(':');
+    var hh = parseInt(hp[0], 10);
+    var min = parseInt(hp[1], 10);
+    var y;
+    var mo;
+    var day;
+    var m;
+    if ((m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/))) {
+      y = parseInt(m[1], 10);
+      mo = parseInt(m[2], 10);
+      day = parseInt(m[3], 10);
+    } else if ((m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) {
+      mo = parseInt(m[1], 10);
+      day = parseInt(m[2], 10);
+      y = parseInt(m[3], 10);
+    } else {
+      return null;
+    }
+    var d = new Date(y, mo - 1, day, hh, min, 0, 0);
     return isNaN(d.getTime()) ? null : d;
+  }
+
+  /** yyyy-mm-dd for local calendar (forecast matching). */
+  function localDateISO(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   }
 
   function rainPctAtHour(forecastJson, dateStr, hourIdx) {
@@ -1136,23 +1174,29 @@
   function renderApptQuick() {
     var host = document.getElementById('appt-quick');
     if (!host) return;
+    var ds = localDatePlusDays(1);
     host.innerHTML =
-      '<div class="field"><label>Customer name</label><input id="qa-name" placeholder="Last, First or First Last"/></div>' +
+      '<form id="qa-appt-form" action="about:blank" method="get" novalidate>' +
+      '<div class="field"><label>Customer name</label><input name="qa-name" id="qa-name" placeholder="Last, First or First Last" autocomplete="name" required/></div>' +
       '<div class="grid-2">' +
-      '<div class="field"><label>Address</label><input id="qa-addr"/></div>' +
-      '<div class="field"><label>Phone</label><input id="qa-phone" type="tel"/></div>' +
+      '<div class="field"><label>Address</label><input name="qa-addr" id="qa-addr" autocomplete="street-address"/></div>' +
+      '<div class="field"><label>Phone</label><input name="qa-phone" id="qa-phone" type="tel" autocomplete="tel"/></div>' +
       '</div>' +
       '<div class="grid-2">' +
-      '<div class="field"><label>Date</label><input id="qa-date" type="date"/></div>' +
-      '<div class="field"><label>Time</label><input id="qa-time" type="time"/></div>' +
+      '<div class="field"><label>Date</label><input name="qa-date" id="qa-date" type="date" value="' +
+      ds +
+      '" required/></div>' +
+      '<div class="field"><label>Time</label><input name="qa-time" id="qa-time" type="time" value="09:00"/></div>' +
       '</div>' +
-      '<button type="button" class="btn btn-primary btn-block" onclick="scheduleQuickAppt()">Save appointment</button>';
-
-    var tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    var ds = tomorrow.toISOString().slice(0, 10);
-    var qaDate = document.getElementById('qa-date');
-    if (qaDate) qaDate.value = ds;
+      '<button type="submit" class="btn btn-primary btn-block">Save appointment</button>' +
+      '</form>';
+    var qf = document.getElementById('qa-appt-form');
+    if (qf) {
+      qf.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        persistAppointmentFromFields(collectApptFields('qa'));
+      });
+    }
   }
 
   // Read appointment fields from the given prefix (`qa` for Home quick form,
@@ -1211,7 +1255,7 @@
     var dt = parseAppointmentWhen(f);
     if (!dt) return;
     var hourIdx = dt.getHours();
-    var dateStr = (f.date || '').trim();
+    var dateStr = localDateISO(dt);
     var url =
       'https://api.open-meteo.com/v1/forecast?latitude=' +
       lat +
@@ -1242,14 +1286,19 @@
   }
 
   function persistAppointmentFromFields(f) {
-    if (!f.name || !f.addr || !f.date) {
-      toast('Name, address, and date are required.');
-      return;
+    try {
+      if (!f.name || !f.addr || !f.date) {
+        toast('Name, address, and date are required.');
+        return;
+      }
+      var id = commitAppointmentRecord(f, null, false);
+      if (!id) return;
+      toast('Appointment saved.');
+      attachWeatherSnapshotToAppointment(id, f);
+    } catch (e) {
+      toast('Could not save appointment. See console for details.');
+      if (window.console && console.error) console.error(e);
     }
-    var id = commitAppointmentRecord(f, null, false);
-    if (!id) return;
-    toast('Appointment saved.');
-    attachWeatherSnapshotToAppointment(id, f);
   }
 
   window.scheduleQuickAppt = function () {
@@ -1451,18 +1500,28 @@
   function ensureAppointmentPage() {
     var host = document.getElementById('appt-form');
     if (!host) return;
-    var tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    var ds = tomorrow.toISOString().slice(0, 10);
+    var ds = localDatePlusDays(1);
     host.innerHTML =
-      '<div class="field"><label>Name</label><input id="ap-name" placeholder="Last, First or First Last"/></div>' +
-      '<div class="field"><label>Address</label><input id="ap-addr"/></div>' +
+      '<form id="appt-save-form" action="about:blank" method="get" novalidate>' +
+      '<div class="field"><label>Name</label><input name="ap-name" id="ap-name" placeholder="Last, First or First Last" autocomplete="name" required/></div>' +
+      '<div class="field"><label>Address</label><input name="ap-addr" id="ap-addr" autocomplete="street-address" required/></div>' +
       '<div class="grid-2">' +
-      '<div class="field"><label>Phone</label><input id="ap-phone" type="tel"/></div>' +
-      '<div class="field"><label>Date</label><input id="ap-date" type="date" value="' + ds + '"/></div>' +
+      '<div class="field"><label>Phone</label><input name="ap-phone" id="ap-phone" type="tel" autocomplete="tel"/></div>' +
+      '<div class="field"><label>Date</label><input name="ap-date" id="ap-date" type="date" value="' +
+      ds +
+      '" required/></div>' +
       '</div>' +
-      '<div class="field"><label>Time</label><input id="ap-time" type="time" value="09:00"/></div>' +
-      '<button type="button" class="btn btn-primary btn-block" onclick="saveApptPage()">Save appointment</button>';
+      '<div class="field"><label>Time</label><input name="ap-time" id="ap-time" type="time" value="09:00"/></div>' +
+      '<button type="submit" class="btn btn-primary btn-block">Save appointment</button>' +
+      '</form>';
+    var fm = document.getElementById('appt-save-form');
+    if (fm) {
+      fm.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        persistAppointmentFromFields(collectApptFields('ap'));
+      });
+    }
   }
 
   // Kept for backward compatibility with renderAll(); now delegates.
