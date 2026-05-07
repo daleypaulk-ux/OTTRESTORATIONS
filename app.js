@@ -1084,8 +1084,7 @@
       '<div class="field"><label>Date</label><input id="qa-date" type="date"/></div>' +
       '<div class="field"><label>Time</label><input id="qa-time" type="time"/></div>' +
       '</div>' +
-      '<button type="button" class="btn btn-primary btn-block" onclick="scheduleQuickAppt()">Check weather &amp; save</button>' +
-      '<p class="muted small">Blocks scheduling when precipitation probability &gt; 70% at appointment hour (Open-Meteo).</p>';
+      '<button type="button" class="btn btn-primary btn-block" onclick="scheduleQuickAppt()">Save appointment</button>';
 
     var tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1130,8 +1129,8 @@
     renderHomeAppointments();
   }
 
-  // Look up rain probability via Open-Meteo, then persist the appointment.
-  // Shared by both quick (Home) and dedicated (Appointment Setter) saves.
+  // Fetches Open-Meteo precipitation probability at the appointment hour for the
+  // snapshot/toast only — scheduling is never blocked by rain.
   function persistAppointmentFromFields(f) {
     if (!f.name || !f.addr || !f.date) {
       toast('Name, address, and date are required.');
@@ -1167,12 +1166,8 @@
             }
           }
         }
-        if (rain > 70) {
-          toast('Rain chance ' + rain + '% — appointment blocked (>70%). Pick another time.');
-          return;
-        }
         commitAppointmentRecord(f, rain, true);
-        toast('Appointment saved. Rain chance ~' + rain + '%.');
+        toast('Appointment saved. Rain chance ~' + rain + '% at appointment hour.');
       })
       .catch(function () {
         commitAppointmentRecord(f, null, false);
@@ -1390,8 +1385,7 @@
       '<div class="field"><label>Date</label><input id="ap-date" type="date" value="' + ds + '"/></div>' +
       '</div>' +
       '<div class="field"><label>Time</label><input id="ap-time" type="time" value="09:00"/></div>' +
-      '<button type="button" class="btn btn-primary btn-block" onclick="saveApptPage()">Check weather &amp; save</button>' +
-      '<p class="muted small">Blocks scheduling when precipitation probability &gt; 70% at appointment hour (Open-Meteo).</p>';
+      '<button type="button" class="btn btn-primary btn-block" onclick="saveApptPage()">Save appointment</button>';
   }
 
   // Kept for backward compatibility with renderAll(); now delegates.
