@@ -572,6 +572,41 @@
     toggleSmenu(false);
   };
 
+  function announceNavChange(v) {
+    var ann = document.getElementById('nav-announcer');
+    if (!ann) return;
+    var panel = document.getElementById('cv-' + v);
+    var label = '';
+    if (panel) {
+      var h1 = panel.querySelector('h1');
+      if (h1 && h1.textContent.trim()) label = h1.textContent.trim();
+    }
+    if (!label) {
+      var match = NAV_ITEMS.filter(function (x) {
+        return x.key === v;
+      })[0];
+      label = match ? match.label : v.replace(/-/g, ' ');
+    }
+    ann.textContent = label ? 'View: ' + label : '';
+  }
+
+  function focusActiveViewTitle(v) {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        var panel = document.getElementById('cv-' + v);
+        var mainEl = document.getElementById('main-content');
+        if (!panel || !mainEl) return;
+        var h1 = panel.querySelector('h1');
+        if (h1) {
+          h1.setAttribute('tabindex', '-1');
+          h1.focus({ preventScroll: true });
+        } else {
+          mainEl.focus({ preventScroll: true });
+        }
+      });
+    });
+  }
+
   window.topNav = function (v) {
     document.querySelectorAll('.cv').forEach(function (el) {
       el.classList.remove('on');
@@ -582,10 +617,15 @@
       li.classList.toggle('active', li.dataset.nav === v);
     });
     document.querySelectorAll('.bottom-nav button').forEach(function (b) {
-      b.classList.toggle('active', b.dataset.bnav === v);
+      var active = b.dataset.bnav === v;
+      b.classList.toggle('active', active);
+      if (active) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
     });
     toggleSmenu(false);
     onViewShow(v);
+    announceNavChange(v);
+    focusActiveViewTitle(v);
   };
 
   function onViewShow(v) {
@@ -626,9 +666,12 @@
   window.toggleSmenu = function (open) {
     var menu = document.getElementById('smenu');
     var scrim = document.getElementById('scrim');
+    var toggle = document.getElementById('smenu-toggle');
     var on = open === undefined ? !menu.classList.contains('on') : !!open;
     menu.classList.toggle('on', on);
     scrim.classList.toggle('on', on);
+    if (toggle) toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+    if (menu) menu.setAttribute('aria-hidden', on ? 'false' : 'true');
   };
 
   function renderSmenu() {
@@ -638,10 +681,13 @@
     if (u && u.role === 'homeowner') {
       var li = document.createElement('li');
       li.dataset.nav = 'portal';
-      li.innerHTML = '<span class="ico">' + SVG.house + '</span><span>Homeowner Portal</span>';
-      li.onclick = function () {
+      li.innerHTML =
+        '<button type="button" class="smenu-link"><span class="ico">' +
+        SVG.house +
+        '</span><span>Homeowner Portal</span></button>';
+      li.querySelector('.smenu-link').addEventListener('click', function () {
         topNav('portal');
-      };
+      });
       ul.appendChild(li);
       return;
     }
@@ -649,10 +695,15 @@
       if (item.key === 'admin' && u && u.role !== 'owner' && u.role !== 'admin') return;
       var li = document.createElement('li');
       li.dataset.nav = item.key;
-      li.innerHTML = '<span class="ico">' + item.icon + '</span><span>' + esc(item.label) + '</span>';
-      li.onclick = function () {
+      li.innerHTML =
+        '<button type="button" class="smenu-link"><span class="ico">' +
+        item.icon +
+        '</span><span>' +
+        esc(item.label) +
+        '</span></button>';
+      li.querySelector('.smenu-link').addEventListener('click', function () {
         topNav(item.key);
-      };
+      });
       ul.appendChild(li);
     });
   }
@@ -2516,8 +2567,8 @@
     });
   };
 
-  window.addPingHere = function () {
-    var raw = (prompt('Address for ping (deduped):') || '').trim();
+  function geocodeAndAddPing(raw) {
+    raw = (raw || '').trim();
     if (!raw) return;
     var rawLower = raw.toLowerCase();
     if (
@@ -2561,6 +2612,35 @@
       initMapLazy();
       toast('Ping added');
     });
+  }
+
+  window.addPingHere = function () {
+    openModal(
+      'Drop ping',
+      '<form id="ping-modal-form" onsubmit="event.preventDefault(); submitPingFromModal();">' +
+        '<div class="field"><label for="ping-address">Address (one ping per location)</label>' +
+        '<input id="ping-address" type="text" autocomplete="street-address" placeholder="e.g. 123 Main St, City, ST" /></div>' +
+        '<div class="field-row" style="gap:12px;margin-top:18px;justify-content:flex-end;flex-wrap:wrap;">' +
+        '<button type="button" class="btn" onclick="closeModal()">Cancel</button>' +
+        '<button type="submit" class="btn btn-primary">Add ping</button>' +
+        '</div></form>'
+    );
+    setTimeout(function () {
+      var inp = document.getElementById('ping-address');
+      if (inp) inp.focus();
+    }, 80);
+  };
+
+  window.submitPingFromModal = function () {
+    var inp = document.getElementById('ping-address');
+    var raw = inp ? inp.value.trim() : '';
+    if (!raw) {
+      toast('Enter an address.');
+      if (inp) inp.focus();
+      return;
+    }
+    closeModal();
+    geocodeAndAddPing(raw);
   };
 
   window.aiAnalyzeMock = function () {
