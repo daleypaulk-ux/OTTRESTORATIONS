@@ -50,24 +50,55 @@
     'PIF',
   ];
 
+  // Inline SVG icon set (stroke-based, currentColor) — avoids broken emoji escapes
+  // and keeps the menu legible across all platforms.
+  var SVG = (function () {
+    function s(path) {
+      return (
+        '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" ' +
+        'stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        path +
+        '</svg>'
+      );
+    }
+    return {
+      home: s('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>'),
+      calendar: s('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>'),
+      shield: s('<path d="M12 3l8 3v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/>'),
+      users: s('<path d="M16 11a4 4 0 10-8 0 4 4 0 008 0z"/><path d="M2 21c0-3.3 4-6 10-6s10 2.7 10 6"/>'),
+      house: s('<path d="M3 12l9-9 9 9"/><path d="M5 11v9h14v-9"/><path d="M10 20v-5h4v5"/>'),
+      grid: s('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
+      chat: s('<path d="M21 12a8 8 0 11-3.5-6.6L21 5l-1 4a8 8 0 011 3z"/><path d="M8 11h8M8 14h5"/>'),
+      map: s('<path d="M9 4l-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/>'),
+      hammer: s('<path d="M14 4l6 6-2 2-6-6 2-2z"/><path d="M11 7L4 14a2 2 0 102.8 2.8L14 10"/>'),
+      sparkle: s('<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/>'),
+      gear: s('<circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5l1.6 1-2 3.5-1.9-.4a7.6 7.6 0 01-2 1.2L14.5 22h-5l-.6-2.2a7.6 7.6 0 01-2-1.2l-1.9.4-2-3.5 1.6-1a7.6 7.6 0 010-2.4L3 11l2-3.5 1.9.4a7.6 7.6 0 012-1.2L9.5 4.5h5l.6 2.2c.7.3 1.4.7 2 1.2l1.9-.4 2 3.5-1.6 1a7.6 7.6 0 010 2.5z"/>'),
+      hardhat: s('<path d="M3 18h18v2H3z"/><path d="M5 18a7 7 0 0114 0"/><path d="M9 6h6v8H9z"/>'),
+      doc: s('<path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z"/><path d="M14 3v6h6"/><path d="M9 13h6M9 17h6"/>'),
+      cash: s('<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v6M18 9v6"/>'),
+      shirt: s('<path d="M4 7l4-3 4 2 4-2 4 3-3 3v10H7V10L4 7z"/>'),
+      lock: s('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'),
+    };
+  })();
+
   var NAV_ITEMS = [
-    { key: 'home', label: 'Home', icon: '\u2302' },
-    { key: 'appointments', label: 'Appointment Setter', icon: '\u270F' },
-    { key: 'slip', label: 'Insurance Permission Slip', icon: '\u2709' },
-    { key: 'customers', label: 'Customers', icon: '\u263A' },
-    { key: 'portal', label: 'Homeowner Portal', icon: '\u1F465' },
-    { key: 'boards', label: 'Boards', icon: '\u25A3' },
-    { key: 'chat', label: 'Team Chat', icon: '\u1F4AC' },
-    { key: 'map', label: 'Door Knock Map', icon: '\u1F5FA' },
-    { key: 'jobs', label: 'Jobs & Orders', icon: '\u1F528' },
-    { key: 'ai', label: 'AI Analyzer', icon: '\u2728' },
-    { key: 'automations', label: 'Automations', icon: '\u2699' },
-    { key: 'subs', label: 'Subcontractor Portal', icon: '\u1F477' },
-    { key: 'invoices', label: 'Invoicing', icon: '\u1F4C4' },
-    { key: 'pay', label: 'Rep Pay', icon: '\u1F4B0' },
-    { key: 'swag', label: 'Swag / Orders', icon: '\u1F45A' },
-    { key: 'settings', label: 'Settings', icon: '\u2699' },
-    { key: 'admin', label: 'Admin', icon: '\u1F510' },
+    { key: 'home', label: 'Home', icon: SVG.home },
+    { key: 'appointments', label: 'Appointment Setter', icon: SVG.calendar },
+    { key: 'slip', label: 'Insurance Permission Slip', icon: SVG.shield },
+    { key: 'customers', label: 'Customers', icon: SVG.users },
+    { key: 'portal', label: 'Homeowner Portal', icon: SVG.house },
+    { key: 'boards', label: 'Boards', icon: SVG.grid },
+    { key: 'chat', label: 'Team Chat', icon: SVG.chat },
+    { key: 'map', label: 'Door Knock Map', icon: SVG.map },
+    { key: 'jobs', label: 'Jobs & Orders', icon: SVG.hammer },
+    { key: 'ai', label: 'AI Analyzer', icon: SVG.sparkle },
+    { key: 'automations', label: 'Automations', icon: SVG.gear },
+    { key: 'subs', label: 'Subcontractor Portal', icon: SVG.hardhat },
+    { key: 'invoices', label: 'Invoicing', icon: SVG.doc },
+    { key: 'pay', label: 'Rep Pay', icon: SVG.cash },
+    { key: 'swag', label: 'Swag / Orders', icon: SVG.shirt },
+    { key: 'settings', label: 'Settings', icon: SVG.gear },
+    { key: 'admin', label: 'Admin', icon: SVG.lock },
   ];
 
   var CHAT_CHANNELS = [
@@ -94,6 +125,7 @@
     map: null,
     mapMarkers: [],
     nightlyTimer: null,
+    portalPreviewId: null,
   };
 
   function uid() {
@@ -466,6 +498,25 @@
     if (v === 'settings') renderSettings();
     if (v === 'admin') renderAdmin();
     if (v === 'jobs') renderJobs();
+    if (v === 'customers') {
+      var cs = document.getElementById('customers-search');
+      renderCustomersTable(cs ? cs.value : '');
+      wireCustomersSearch();
+    }
+    if (v === 'appointments') {
+      ensureAppointmentPage();
+      autoOpenJotForm('appointmentSetter');
+    }
+    if (v === 'slip') autoOpenJotForm('insuranceSlip');
+    if (v === 'swag') autoOpenJotForm('orderForm');
+  }
+
+  // Open a JotForm modal once per navigation. Skips if the modal is already
+  // open so rapid tab-switching doesn't re-trigger the iframe load.
+  function autoOpenJotForm(key) {
+    var modal = document.getElementById('jotform-modal');
+    if (modal && modal.classList.contains('on')) return;
+    setTimeout(function () { window.openJotForm(key); }, 50);
   }
 
   window.toggleSmenu = function (open) {
@@ -483,7 +534,7 @@
     if (u && u.role === 'homeowner') {
       var li = document.createElement('li');
       li.dataset.nav = 'portal';
-      li.innerHTML = '<span class="ico">\u1F3E0</span><span>Homeowner Portal</span>';
+      li.innerHTML = '<span class="ico">' + SVG.house + '</span><span>Homeowner Portal</span>';
       li.onclick = function () {
         topNav('portal');
       };
@@ -986,21 +1037,33 @@
     if (qaDate) qaDate.value = ds;
   }
 
-  window.scheduleQuickAppt = function () {
-    var name = (document.getElementById('qa-name').value || '').trim();
-    var addr = (document.getElementById('qa-addr').value || '').trim();
-    var phone = (document.getElementById('qa-phone').value || '').trim();
-    var date = document.getElementById('qa-date').value;
-    var time = document.getElementById('qa-time').value || '09:00';
-    if (!name || !addr || !date) {
+  // Read appointment fields from the given prefix (`qa` for Home quick form,
+  // `ap` for the dedicated Appointment Setter page) and return a plain object.
+  function collectApptFields(prefix) {
+    function val(id) {
+      var el = document.getElementById(id);
+      return el ? (el.value || '').trim() : '';
+    }
+    return {
+      name: val(prefix + '-name'),
+      addr: val(prefix + '-addr'),
+      phone: val(prefix + '-phone'),
+      date: val(prefix + '-date'),
+      time: val(prefix + '-time') || '09:00',
+    };
+  }
+
+  // Look up rain probability via Open-Meteo, then persist the appointment.
+  // Shared by both quick (Home) and dedicated (Appointment Setter) saves.
+  function persistAppointmentFromFields(f) {
+    if (!f.name || !f.addr || !f.date) {
       toast('Name, address, and date are required.');
       return;
     }
     var lat = state.settings.lat;
     var lon = state.settings.lon;
-    var dt = new Date(date + 'T' + time + ':00');
+    var dt = new Date(f.date + 'T' + f.time + ':00');
     var hourIdx = dt.getHours();
-
     var url =
       'https://api.open-meteo.com/v1/forecast?latitude=' +
       lat +
@@ -1008,34 +1071,29 @@
       lon +
       '&hourly=precipitation_probability&temperature_unit=fahrenheit';
     fetch(url)
-      .then(function (r) {
-        return r.json();
-      })
+      .then(function (r) { return r.json(); })
       .then(function (d) {
         var times = d.hourly && d.hourly.time;
         var probs = d.hourly && d.hourly.precipitation_probability;
         var rain = 0;
         if (times && probs) {
           for (var i = 0; i < times.length; i++) {
-            if (times[i].indexOf(date) !== -1) {
+            if (times[i].indexOf(f.date) !== -1) {
               var hh = parseInt(times[i].slice(11, 13), 10);
-              if (hh === hourIdx) {
-                rain = probs[i] || 0;
-                break;
-              }
+              if (hh === hourIdx) { rain = probs[i] || 0; break; }
             }
           }
         }
         if (rain > 70) {
-          toast('Rain chance ' + rain + '% — appointment blocked (&gt;70%). Pick another time.');
+          toast('Rain chance ' + rain + '% — appointment blocked (>70%). Pick another time.');
           return;
         }
         var u = getUser();
         state.appts.push({
           id: uid(),
-          name: formatLF(name),
-          addr: addr,
-          phone: phone,
+          name: formatLF(f.name),
+          addr: f.addr,
+          phone: f.phone,
           when: dt.toISOString(),
           rep: u && u.email ? u.email : '',
           completed: false,
@@ -1048,6 +1106,10 @@
       .catch(function () {
         toast('Weather check failed — appointment not saved.');
       });
+  }
+
+  window.scheduleQuickAppt = function () {
+    persistAppointmentFromFields(collectApptFields('qa'));
   };
 
   function renderTodo() {
@@ -1240,28 +1302,33 @@
     });
   }
 
-  function renderApptPageForm() {
+  // Idempotent: always (re)render the Appointment Setter page form so the view
+  // is usable even if the user navigates here before Home has rendered.
+  function ensureAppointmentPage() {
     var host = document.getElementById('appt-form');
-    if (!host || host.done) return;
-    host.done = true;
+    if (!host) return;
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    var ds = tomorrow.toISOString().slice(0, 10);
     host.innerHTML =
-      '<div class="field"><label>Name</label><input id="ap-name"/></div>' +
+      '<div class="field"><label>Name</label><input id="ap-name" placeholder="Last, First or First Last"/></div>' +
       '<div class="field"><label>Address</label><input id="ap-addr"/></div>' +
       '<div class="grid-2">' +
       '<div class="field"><label>Phone</label><input id="ap-phone" type="tel"/></div>' +
-      '<div class="field"><label>Date</label><input id="ap-date" type="date"/></div>' +
+      '<div class="field"><label>Date</label><input id="ap-date" type="date" value="' + ds + '"/></div>' +
       '</div>' +
-      '<div class="field"><label>Time</label><input id="ap-time" type="time"/></div>' +
-      '<button type="button" class="btn btn-primary" onclick="saveApptPage()">Save appointment</button>';
+      '<div class="field"><label>Time</label><input id="ap-time" type="time" value="09:00"/></div>' +
+      '<button type="button" class="btn btn-primary btn-block" onclick="saveApptPage()">Check weather &amp; save</button>' +
+      '<p class="muted small">Blocks scheduling when precipitation probability &gt; 70% at appointment hour (Open-Meteo).</p>';
+  }
+
+  // Kept for backward compatibility with renderAll(); now delegates.
+  function renderApptPageForm() {
+    ensureAppointmentPage();
   }
 
   window.saveApptPage = function () {
-    document.getElementById('qa-name').value = document.getElementById('ap-name').value;
-    document.getElementById('qa-addr').value = document.getElementById('ap-addr').value;
-    document.getElementById('qa-phone').value = document.getElementById('ap-phone').value;
-    document.getElementById('qa-date').value = document.getElementById('ap-date').value;
-    document.getElementById('qa-time').value = document.getElementById('ap-time').value;
-    scheduleQuickAppt();
+    persistAppointmentFromFields(collectApptFields('ap'));
   };
 
   function renderCustomersTable(filter) {
@@ -1924,9 +1991,7 @@
     if (!root) return;
     var u = getUser();
     if (u.role !== 'homeowner') {
-      root.innerHTML =
-        '<div class="card"><p>Internal preview: select a customer and open their portal link.</p>' +
-        '<button class="btn" onclick="topNav(\'customers\')">Go to Customers</button></div>';
+      renderInternalPortalPreview(root);
       return;
     }
     var lead = getLeadById(u.leadId);
@@ -1934,9 +1999,49 @@
       root.innerHTML = '<div class="empty">Portal session invalid.</div>';
       return;
     }
-    var rem = Math.max(0, (Number(lead.acv) || 0) - (Number(lead.collected) || 0));
+    root.innerHTML = '<div class="page-head"><h1>Homeowner Portal</h1></div>' + renderPortalCardHtml(lead);
+  }
+
+  // Internal-user view: pick a lead and preview the homeowner-facing card inline.
+  function renderInternalPortalPreview(root) {
+    var leads = filterLeads();
+    var selectedId = state.portalPreviewId && getLeadById(state.portalPreviewId) ? state.portalPreviewId : (leads[0] && leads[0].id);
+    state.portalPreviewId = selectedId;
+    var options = leads.map(function (l) {
+      return '<option value="' + escAttr(l.id) + '"' + (l.id === selectedId ? ' selected' : '') + '>' +
+        esc(l.name) + ' — ' + esc(l.addr || '') + '</option>';
+    }).join('');
+
+    var preview = '';
+    if (selectedId) {
+      var lead = getLeadById(selectedId);
+      preview = renderPortalCardHtml(lead) +
+        '<div class="card"><div class="flex between" style="gap:10px;flex-wrap:wrap">' +
+        '<button class="btn btn-secondary btn-sm" onclick="copyPortalLink(\'' + lead.id + '\')">Copy portal link</button>' +
+        '<button class="btn btn-sm" onclick="openCustomer(\'' + lead.id + '\')">Open full customer record</button>' +
+        '</div></div>';
+    } else {
+      preview = '<div class="card"><div class="empty">No customers yet. Add one from the Customers view.</div></div>';
+    }
+
     root.innerHTML =
-      '<div class="page-head"><h1>Homeowner Portal</h1></div>' +
+      '<div class="page-head"><h1>Homeowner Portal</h1><p class="muted small">Internal preview of what a homeowner sees when they open their portal link.</p></div>' +
+      '<div class="card"><div class="field"><label>Preview customer</label>' +
+      '<select id="portal-pick" onchange="selectPortalPreview(this.value)">' + options + '</select></div></div>' +
+      preview;
+  }
+
+  window.selectPortalPreview = function (id) {
+    state.portalPreviewId = id;
+    renderHomeownerPortal();
+  };
+
+  // Shared homeowner-facing portal card markup (used both for live homeowners
+  // and the internal preview).
+  function renderPortalCardHtml(lead) {
+    if (!lead) return '<div class="empty">Customer not found.</div>';
+    var rem = Math.max(0, (Number(lead.acv) || 0) - (Number(lead.collected) || 0));
+    return (
       '<div class="card">' +
       '<p><strong>Job address:</strong> ' +
       esc(lead.addr + ', ' + lead.city + ' ' + lead.state) +
@@ -1965,7 +2070,8 @@
       '<h3>Leave a review</h3><p><a href="' +
       escAttr(state.settings.reviewUrl) +
       '" target="_blank" rel="noopener">Google review link</a></p>' +
-      '</div>';
+      '</div>'
+    );
   }
 
   function mapErrorHtml(title, details) {
@@ -2320,9 +2426,46 @@
   function renderJobs() {
     var host = document.getElementById('jobs-body');
     if (!host) return;
+    var leads = filterLeads().filter(function (l) {
+      return l.stage >= 6 && !l.complete;
+    });
+    leads.sort(function (a, b) { return (b.stage || 0) - (a.stage || 0); });
+
+    var head =
+      '<div class="card">' +
+      '<div class="flex between" style="align-items:center;flex-wrap:wrap;gap:10px;">' +
+      '<h3 style="margin:0">Active jobs</h3>' +
+      '<span class="muted small">Showing customers in production (stage 6+).</span>' +
+      '</div></div>';
+
+    if (!leads.length) {
+      host.innerHTML = head + '<div class="card"><div class="empty">No active jobs yet. Promote a customer past stage 6 (MO / Contract) to see them here.</div></div>';
+      return;
+    }
+
+    var rows = leads.map(function (l) {
+      var stageLabel = STAGE_LABELS[l.stage - 1] || '';
+      var rem = Math.max(0, (Number(l.acv) || 0) - (Number(l.collected) || 0));
+      var moCount = (l.materialOrder && l.materialOrder.items) ? l.materialOrder.items.length : 0;
+      var moStatus = l.materialOrder && l.materialOrder.approved ? 'approved' : (moCount ? 'pending' : '—');
+      return (
+        '<tr>' +
+        '<td><a href="javascript:void(0)" onclick="openCustomer(\'' + l.id + '\')">' + esc(l.name) + '</a>' +
+        '<div class="muted small">' + esc((l.addr || '') + ', ' + (l.city || '') + ' ' + (l.state || '')) + '</div></td>' +
+        '<td><span class="pill">' + l.stage + '</span> <span class="muted small">' + esc(stageLabel) + '</span></td>' +
+        '<td>' + esc(l.rep || '') + '</td>' +
+        '<td>' + money(l.collected) + ' <span class="muted small">/ rem ' + money(rem) + '</span></td>' +
+        '<td>' + (moCount ? (moCount + ' items · ' + esc(moStatus)) : '<span class="muted">—</span>') + '</td>' +
+        '<td><button class="btn btn-sm" onclick="openCustomer(\'' + l.id + '\')">Open</button></td>' +
+        '</tr>'
+      );
+    }).join('');
+
     host.innerHTML =
-      '<div class="card"><p>Jobs tied to customer stages & material orders. Open a customer for production detail.</p>' +
-      '<button class="btn" onclick="topNav(\'customers\')">Customers</button></div>';
+      head +
+      '<div class="card"><table class="tbl">' +
+      '<thead><tr><th>Customer</th><th>Stage</th><th>Rep</th><th>Collected</th><th>Material order</th><th></th></tr></thead>' +
+      '<tbody>' + rows + '</tbody></table></div>';
   }
 
   function renderSettings() {

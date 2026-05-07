@@ -431,7 +431,8 @@ label {
   color: var(--text);
   font-weight: 600;
 }
-.smenu-list .ico { width: 22px; text-align: center; color: var(--muted); }
+.smenu-list .ico { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.smenu-list .ico svg { width: 20px; height: 20px; display: block; }
 .smenu-list li.active .ico { color: var(--red); }
 
 .smenu-foot { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
@@ -838,7 +839,8 @@ table.tbl tbody tr:hover td { background: var(--red-soft); cursor: pointer; }
   position: relative;
   box-shadow: none;
 }
-.bottom-nav button .ico { font-size: 18px; line-height: 1; }
+.bottom-nav button .ico { font-size: 18px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.bottom-nav button .ico svg { width: 22px; height: 22px; display: block; }
 .bottom-nav button.active { color: var(--red); }
 .bottom-nav button.active::before {
   content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 2px;
