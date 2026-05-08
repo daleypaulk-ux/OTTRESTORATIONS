@@ -1083,6 +1083,138 @@ ol.areas .score {
 .flex { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 .flex.between { justify-content: space-between; }
 
+/* ============================================================
+   Leaderboard mini-cards
+   ============================================================ */
+
+.leaderboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.leaderboard-mini h3 {
+  margin: 0 0 6px;
+  font-size: var(--text-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.leaderboard-mini .lb-tbl { font-size: var(--text-sm); }
+.leaderboard-mini .lb-tbl td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.leaderboard-mini .lb-tbl tr:last-child td { border-bottom: none; }
+.leaderboard-mini .lb-rank { width: 32px; text-align: center; font-weight: 700; }
+.leaderboard-mini .lb-num { width: 56px; text-align: right; font-weight: 700; color: var(--text); }
+.leaderboard-mini .rank {
+  display: inline-block; width: 22px; line-height: 22px; border-radius: 50%;
+  background: var(--off-2); color: var(--muted); font-size: 12px;
+}
+
+/* ============================================================
+   OTT Boards (per-rep editable spreadsheet)
+   ============================================================ */
+
+.boards-toolbar {
+  display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap;
+  background: var(--surface); padding: var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--radius-md); margin-bottom: var(--space-3);
+}
+.boards-toolbar .field { margin: 0; }
+.boards-toolbar label { display:block; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+.boards-toolbar select, .boards-toolbar input { padding: 8px 10px; }
+
+.board-section { margin-bottom: var(--space-5); }
+.board-rep {
+  margin: 0 0 var(--space-2);
+  font-family: var(--sans);
+  font-size: var(--text-base);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  border-bottom: 2px solid var(--red);
+  padding-bottom: 6px;
+}
+
+.ott-board-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.ott-board {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: var(--text-sm);
+}
+.ott-board thead th {
+  background: var(--off);
+  color: var(--text-2);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-strong);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.ott-board thead .board-waiting {
+  background: var(--red-soft);
+  color: var(--red-dark);
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+.ott-board thead .board-name { min-width: 180px; }
+.ott-board tbody tr:nth-child(odd) td { background: var(--white); }
+.ott-board tbody tr:nth-child(even) td { background: var(--off); }
+.ott-board td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.ott-board td.board-name { font-weight: 600; }
+.ott-board td.board-name a { color: var(--text); text-decoration: none; }
+.ott-board td.board-name a:hover { color: var(--red); text-decoration: underline; }
+
+.board-input {
+  width: 100%;
+  min-width: 120px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+.board-input:hover { border-color: var(--border); }
+.board-input:focus {
+  outline: none;
+  border-color: var(--red);
+  background: var(--white);
+  box-shadow: 0 0 0 3px var(--red-ring);
+}
+
+.boards-saved {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  background: #1f8a3f;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity .15s ease, transform .15s ease;
+  pointer-events: none;
+  z-index: 300;
+}
+.boards-saved.on { opacity: 1; transform: translateY(0); }
+
 /* Print: hide chrome */
 @media print {
   .top-bar, .bottom-nav, .smenu, .scrim { display: none !important; }

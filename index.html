@@ -126,21 +126,16 @@
               </div>
             </div>
             <div class="card">
-              <h2>Quick Set Appointment</h2>
-              <div id="appt-quick"></div>
+              <div class="card-hd" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+                <h2 style="margin:0">Leads</h2>
+                <button type="button" class="btn btn-sm btn-primary" onclick="topNav('knockups')">+ New Knock Up</button>
+              </div>
+              <div id="home-leads"></div>
             </div>
             <div class="card">
               <h2>Today's To-Do</h2>
               <div id="todo-list"></div>
             </div>
-          </div>
-
-          <div class="card" style="margin-top:16px;">
-            <div class="card-hd" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-              <h2 style="margin:0">Upcoming appointments</h2>
-              <button type="button" class="btn btn-sm btn-ghost" onclick="topNav('boards')">Full list on Boards</button>
-            </div>
-            <div id="home-appts"></div>
           </div>
 
           <div class="grid-2" style="margin-top:16px;">
@@ -156,15 +151,15 @@
         </div>
       </section>
 
-      <!-- Appointment Setter -->
-      <section id="cv-appointments" class="cv">
+      <!-- Knock Ups -->
+      <section id="cv-knockups" class="cv">
         <div class="page">
-          <div class="page-head"><h1>Appointment Setter</h1></div>
+          <div class="page-head"><h1>Knock Ups</h1></div>
           <div class="card">
-            <p class="muted">Quick form: Name, Address, Phone, Date, Time. The full JotForm opens automatically when you arrive on this page.</p>
-            <div id="appt-form"></div>
+            <p class="muted">Log a door-knock contact. The "tab" tracks who knocked, and the time is captured automatically when this page is opened. Submitted knock ups appear chronologically on Home and on the OTT Boards.</p>
+            <div id="knockup-form"></div>
             <div class="divider"></div>
-            <button class="btn btn-secondary btn-sm" onclick="openJotForm('appointmentSetter')">Re-open JotForm</button>
+            <button class="btn btn-secondary btn-sm" onclick="openJotForm('appointmentSetter')">Open full Appointment Setter form</button>
           </div>
         </div>
       </section>

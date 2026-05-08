@@ -83,7 +83,7 @@
 
   var NAV_ITEMS = [
     { key: 'home', label: 'Home', icon: SVG.home },
-    { key: 'appointments', label: 'Appointment Setter', icon: SVG.calendar },
+    { key: 'knockups', label: 'Knock Ups', icon: SVG.calendar },
     { key: 'slip', label: 'Insurance Permission Slip', icon: SVG.shield },
     { key: 'customers', label: 'Customers', icon: SVG.users },
     { key: 'portal', label: 'Homeowner Portal', icon: SVG.house },
@@ -294,6 +294,19 @@
       ku: Number(o.ku) || 0,
       ci: Number(o.ci) || 0,
       slipsSigned: Number(o.slipsSigned) || 0,
+      knockedAt: o.knockedAt || '',
+      knockedBy: o.knockedBy || '',
+      board: o.board || {
+        who: '',
+        since: '',
+        what: '',
+        cb: '',
+        lastAttempt: '',
+        notes: '',
+        nextStep: '',
+        dateInstalled: '',
+        gutters: '',
+      },
       portalToken: o.portalToken || uid(),
       buildingCodes: o.buildingCodes || '',
       moDraft: o.moDraft || null,
@@ -603,13 +616,14 @@
       renderCustomersTable(cs ? cs.value : '');
       wireCustomersSearch();
     }
-    if (v === 'appointments') {
-      ensureAppointmentPage();
+    if (v === 'knockups') {
+      state.knockOpenedAt = Date.now();
+      ensureKnockUpPage();
       autoOpenJotForm('appointmentSetter');
     }
     if (v === 'slip') autoOpenJotForm('insuranceSlip');
     if (v === 'swag') autoOpenJotForm('orderForm');
-    if (v === 'home') renderHomeAppointments();
+    if (v === 'home') renderHomeLeads();
   }
 
   // Open a JotForm modal once per navigation. Skips if the modal is already
@@ -738,15 +752,13 @@
     renderSmenu();
     renderHeader();
     renderHomeWidgets();
-    renderApptQuick();
-    renderApptPageForm();
+    ensureKnockUpPage();
     renderCustomersTable();
     renderLeaderboard();
     renderTeamTotals();
     scheduleNightlyChatRollup();
     wireSearch();
     wireCustomersSearch();
-    checkMissedAppointments();
   }
 
   function formatLF(name) {
@@ -780,58 +792,94 @@
   function renderHomeWidgets() {
     fetchWeather();
     renderTodo();
-    renderHomeAppointments();
+    renderHomeLeads();
   }
 
-  // Appointments visible to the logged-in rep (or all for owner/admin).
-  function appointmentsForCurrentUser() {
+  // Leads visible to the logged-in rep (or all for owner/admin).
+  function leadsForCurrentUser() {
     var u = getUser();
     if (!u || u.role === 'homeowner') return [];
+    if (u.role === 'owner' || u.role === 'admin') return state.leads.slice();
     var email = u.email || '';
-    if (u.role === 'owner' || u.role === 'admin') return state.appts.slice();
-    return state.appts.filter(function (a) {
-      return a.rep === email;
+    return state.leads.filter(function (l) {
+      return l.rep === email;
     });
   }
 
-  function renderHomeAppointments() {
-    var host = document.getElementById('home-appts');
+  // Sortable timestamp for chronological display: knockedAt if set, otherwise
+  // a synthetic time derived from the lead id (uid encodes Date.now in base36).
+  function leadSortStamp(l) {
+    if (l.knockedAt) {
+      var t = new Date(l.knockedAt).getTime();
+      if (!isNaN(t)) return t;
+    }
+    var m = String(l.id || '').match(/[a-z0-9]+$/);
+    if (m && m[0]) {
+      var n = parseInt(m[0], 36);
+      if (!isNaN(n)) return n;
+    }
+    return 0;
+  }
+
+  function formatRelativeStamp(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    var now = new Date();
+    var sameDay =
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth() === now.getMonth() &&
+      d.getDate() === now.getDate();
+    var hm = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    if (sameDay) return 'Today ' + hm;
+    var yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (
+      d.getFullYear() === yesterday.getFullYear() &&
+      d.getMonth() === yesterday.getMonth() &&
+      d.getDate() === yesterday.getDate()
+    ) {
+      return 'Yesterday ' + hm;
+    }
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + hm;
+  }
+
+  function renderHomeLeads() {
+    var host = document.getElementById('home-leads');
     if (!host) return;
     var u = getUser();
     if (!u || u.role === 'homeowner') {
       host.innerHTML = '';
       return;
     }
-    var startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    var rows = appointmentsForCurrentUser()
-      .filter(function (a) {
-        return !a.completed;
-      })
-      .filter(function (a) {
-        return new Date(a.when).getTime() >= startOfToday.getTime();
-      })
+    var rows = leadsForCurrentUser()
+      .slice()
       .sort(function (a, b) {
-        return new Date(a.when) - new Date(b.when);
+        return leadSortStamp(b) - leadSortStamp(a);
       })
       .slice(0, 25);
     if (!rows.length) {
       host.innerHTML =
-        '<p class="muted" style="margin:0">No appointments scheduled from today forward. Save one from Quick Set or Appointment Setter.</p>';
+        '<p class="muted" style="margin:0">No leads yet. Log a knock up from the Knock Ups tab.</p>';
       return;
     }
     host.innerHTML =
-      '<table class="tbl"><thead><tr><th>When</th><th>Customer</th><th>Address</th></tr></thead><tbody>' +
+      '<table class="tbl"><thead><tr>' +
+      '<th>Time</th><th>Customer</th><th>Address</th><th>Door Knocker</th><th>Stage</th><th></th>' +
+      '</tr></thead><tbody>' +
       rows
-        .map(function (a) {
+        .map(function (l) {
+          var stamp = l.knockedAt ? formatRelativeStamp(l.knockedAt) : '—';
+          var knocker = l.knockedBy || l.rep || '';
           return (
-            '<tr><td>' +
-            esc(new Date(a.when).toLocaleString()) +
-            '</td><td>' +
-            esc(a.name) +
-            '</td><td>' +
-            esc(a.addr) +
-            '</td></tr>'
+            '<tr>' +
+            '<td class="muted small">' + esc(stamp) + '</td>' +
+            '<td>' + esc(formatLF(l.name)) + '</td>' +
+            '<td>' + esc(l.addr || '') + (l.city ? ', ' + esc(l.city) : '') + '</td>' +
+            '<td>' + esc(knocker) + '</td>' +
+            '<td><span class="pill">' + l.stage + '</span></td>' +
+            '<td><button class="btn btn-sm" onclick="openCustomer(\'' + escAttr(l.id) + '\')">Open</button></td>' +
+            '</tr>'
           );
         })
         .join('') +
@@ -1171,139 +1219,124 @@
       });
   };
 
-  function renderApptQuick() {
-    var host = document.getElementById('appt-quick');
-    if (!host) return;
-    var ds = localDatePlusDays(1);
-    host.innerHTML =
-      '<form id="qa-appt-form" action="about:blank" method="get" novalidate>' +
-      '<div class="field"><label>Customer name</label><input name="qa-name" id="qa-name" placeholder="Last, First or First Last" autocomplete="name" required/></div>' +
-      '<div class="grid-2">' +
-      '<div class="field"><label>Address</label><input name="qa-addr" id="qa-addr" autocomplete="street-address"/></div>' +
-      '<div class="field"><label>Phone</label><input name="qa-phone" id="qa-phone" type="tel" autocomplete="tel"/></div>' +
-      '</div>' +
-      '<div class="grid-2">' +
-      '<div class="field"><label>Date</label><input name="qa-date" id="qa-date" type="date" value="' +
-      ds +
-      '" required/></div>' +
-      '<div class="field"><label>Time</label><input name="qa-time" id="qa-time" type="time" value="09:00"/></div>' +
-      '</div>' +
-      '<button type="submit" class="btn btn-primary btn-block">Save appointment</button>' +
-      '</form>';
-    var qf = document.getElementById('qa-appt-form');
-    if (qf) {
-      qf.addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        persistAppointmentFromFields(collectApptFields('qa'));
-      });
-    }
-  }
+  /* ------------------------------------------------------------
+     Knock Ups (replaces the old Appointment Setter / Quick Set form).
+     A submitted knock-up creates a real lead in state.leads with the
+     logged-in user (or chosen rep) as the door knocker, stamped at the
+     time the Knock Ups view was opened.
+     ------------------------------------------------------------ */
 
-  // Read appointment fields from the given prefix (`qa` for Home quick form,
-  // `ap` for the dedicated Appointment Setter page) and return a plain object.
-  function collectApptFields(prefix) {
-    function val(id) {
-      var el = document.getElementById(id);
-      return el ? (el.value || '').trim() : '';
-    }
-    return {
-      name: val(prefix + '-name'),
-      addr: val(prefix + '-addr'),
-      phone: val(prefix + '-phone'),
-      date: val(prefix + '-date'),
-      time: val(prefix + '-time') || '09:00',
-    };
-  }
+  // Captured at view-open so the timestamp reflects when the worker started
+  // logging the contact, not when they hit "submit".
+  state.knockOpenedAt = state.knockOpenedAt || null;
 
-  function commitAppointmentRecord(f, rainPct, weatherOk) {
-    var dt = parseAppointmentWhen(f);
-    if (!dt) {
-      toast('Invalid date or time — use the date and time fields.');
-      return null;
-    }
+  function repUserOptions() {
     var u = getUser();
-    var id = uid();
-    var rec = {
-      id: id,
-      name: formatLF(f.name),
-      addr: f.addr,
-      phone: f.phone,
-      when: dt.toISOString(),
-      rep: u && u.email ? u.email : '',
-      completed: false,
-      missedNotified: false,
-      rainPctSnapshot: typeof rainPct === 'number' ? rainPct : null,
-      weatherOk: !!weatherOk,
-    };
-    state.appts.push(rec);
-    if (!persistAppts()) {
-      state.appts.pop();
-      return null;
-    }
-    renderBoards();
-    renderHomeAppointments();
-    return id;
+    var pick = state.knockUpRepId || (u && u.id) || '';
+    return state.users
+      .filter(function (x) {
+        return x.role === 'rep' || x.role === 'admin' || x.role === 'owner';
+      })
+      .map(function (x) {
+        var sel = x.id === pick ? ' selected' : '';
+        return '<option value="' + escAttr(x.id) + '"' + sel + '>' + esc(x.name || x.email) + '</option>';
+      })
+      .join('');
   }
 
-  // Optional: Open-Meteo fetch runs after save (non-blocking) so a slow or
-  // blocked network never prevents the appointment from being stored.
-  function attachWeatherSnapshotToAppointment(apptId, f) {
-    if (!apptId) return;
-    var lat = Number(state.settings.lat);
-    var lon = Number(state.settings.lon);
-    if (isNaN(lat) || isNaN(lon)) return;
-    var dt = parseAppointmentWhen(f);
-    if (!dt) return;
-    var hourIdx = dt.getHours();
-    var dateStr = localDateISO(dt);
-    var url =
-      'https://api.open-meteo.com/v1/forecast?latitude=' +
-      lat +
-      '&longitude=' +
-      lon +
-      '&hourly=precipitation_probability&temperature_unit=fahrenheit';
-    fetchWithTimeout(url, 8000)
-      .then(function (r) {
-        if (!r.ok) throw new Error('weather http');
-        return r.json();
-      })
-      .then(function (d) {
-        var rain = rainPctAtHour(d, dateStr, hourIdx);
-        var a = state.appts.find(function (x) {
-          return x.id === apptId;
-        });
-        if (!a) return;
-        a.rainPctSnapshot = rain;
-        a.weatherOk = true;
-        if (persistAppts()) {
-          renderBoards();
-          renderHomeAppointments();
-        }
-      })
-      .catch(function () {
-        /* optional metadata only */
+  function ensureKnockUpPage() {
+    var host = document.getElementById('knockup-form');
+    if (!host) return;
+    if (!state.knockOpenedAt) state.knockOpenedAt = Date.now();
+    var stamp = new Date(state.knockOpenedAt);
+    var stampLabel =
+      stamp.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
+      ' ' +
+      stamp.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    host.innerHTML =
+      '<form id="knockup-save-form" action="about:blank" method="get" novalidate>' +
+      '<div class="grid-2">' +
+      '<div class="field"><label>Customer name</label><input name="ku-name" id="ku-name" placeholder="Last, First or First Last" autocomplete="name" required/></div>' +
+      '<div class="field"><label>Phone</label><input name="ku-phone" id="ku-phone" type="tel" autocomplete="tel"/></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+      '<div class="field"><label>Address</label><input name="ku-addr" id="ku-addr" autocomplete="street-address" required/></div>' +
+      '<div class="field"><label>City</label><input name="ku-city" id="ku-city" autocomplete="address-level2"/></div>' +
+      '</div>' +
+      '<div class="grid-2">' +
+      '<div class="field"><label>Door Knocker (tab)</label><select name="ku-rep" id="ku-rep">' +
+      repUserOptions() +
+      '</select></div>' +
+      '<div class="field"><label>Knocked at</label><input id="ku-when-display" value="' +
+      escAttr(stampLabel) +
+      '" disabled/></div>' +
+      '</div>' +
+      '<div class="field"><label>Notes</label><textarea name="ku-notes" id="ku-notes" rows="3" placeholder="Pitch, gate code, dog, follow-up, etc."></textarea></div>' +
+      '<button type="submit" class="btn btn-primary btn-block">Log knock up</button>' +
+      '</form>';
+
+    var fm = document.getElementById('knockup-save-form');
+    if (fm) {
+      fm.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        submitKnockUp();
       });
+    }
+    var sel = document.getElementById('ku-rep');
+    if (sel) {
+      sel.addEventListener('change', function () {
+        state.knockUpRepId = sel.value;
+      });
+    }
   }
 
-  function persistAppointmentFromFields(f) {
+  function submitKnockUp() {
     try {
-      if (!f.name || !f.addr || !f.date) {
-        toast('Name, address, and date are required.');
+      var nameVal = (document.getElementById('ku-name') || {}).value || '';
+      var addr = ((document.getElementById('ku-addr') || {}).value || '').trim();
+      var city = ((document.getElementById('ku-city') || {}).value || '').trim();
+      var phone = ((document.getElementById('ku-phone') || {}).value || '').trim();
+      var notes = ((document.getElementById('ku-notes') || {}).value || '').trim();
+      var repId = ((document.getElementById('ku-rep') || {}).value || '').trim();
+      if (!nameVal.trim() || !addr) {
+        toast('Customer name and address are required.');
         return;
       }
-      var id = commitAppointmentRecord(f, null, false);
-      if (!id) return;
-      toast('Appointment saved.');
-      attachWeatherSnapshotToAppointment(id, f);
+      var repUser =
+        state.users.find(function (x) {
+          return x.id === repId;
+        }) || getUser();
+      var repEmail = repUser && repUser.email ? repUser.email : '';
+      var repName = repUser ? repUser.name || repUser.email : '';
+      var when = new Date(state.knockOpenedAt || Date.now());
+      var lead = defaultLead({
+        name: formatLF(nameVal),
+        addr: addr,
+        city: city,
+        phone: phone,
+        rep: repEmail,
+        knockedAt: when.toISOString(),
+        knockedBy: repName,
+        stage: 1,
+        src: 'Door',
+        notes: notes,
+      });
+      addTimeline(lead, 'Knock Up logged by ' + repName);
+      state.leads.push(lead);
+      persistLeads();
+      state.knockOpenedAt = Date.now(); // reset for the next entry
+      ensureKnockUpPage();
+      renderHomeLeads();
+      renderLeaderboard();
+      renderTeamTotals();
+      renderBoards();
+      toast('Knock Up logged.');
     } catch (e) {
-      toast('Could not save appointment. See console for details.');
+      toast('Could not log knock up. See console for details.');
       if (window.console && console.error) console.error(e);
     }
   }
-
-  window.scheduleQuickAppt = function () {
-    persistAppointmentFromFields(collectApptFields('qa'));
-  };
 
   function renderTodo() {
     var el = document.getElementById('todo-list');
@@ -1363,96 +1396,112 @@
     renderTodo();
   };
 
-  function aggregateRepStats() {
-    var map = {};
+  // Per-rep counts: knock-ups (any owned lead), contracts signed (slip true),
+  // and closed deals (stage >= 12 or marked complete). Visible to the same
+  // role-scoped lead set as the rest of the app.
+  function repTotals() {
+    var byEmail = {};
+    state.users.forEach(function (u) {
+      if (u.role === 'rep' || u.role === 'admin' || u.role === 'owner') {
+        byEmail[u.email] = {
+          rep: u.email,
+          name: u.name || u.email,
+          knockUps: 0,
+          contracts: 0,
+          closed: 0,
+        };
+      }
+    });
     filterLeads().forEach(function (l) {
       var key = l.rep || 'Unassigned';
-      if (!map[key])
-        map[key] = {
-          rep: key,
-          ku: 0,
-          ci: 0,
-          slips: 0,
-          collected: 0,
-          jobs: 0,
-        };
-      map[key].ku += Number(l.ku) || 0;
-      map[key].ci += Number(l.ci) || 0;
-      map[key].slips += Number(l.slipsSigned) || 0;
-      map[key].collected += Number(l.collected) || 0;
-      if (l.stage >= 12 || l.complete) map[key].jobs += 1;
+      if (!byEmail[key]) {
+        byEmail[key] = { rep: key, name: key, knockUps: 0, contracts: 0, closed: 0 };
+      }
+      byEmail[key].knockUps += 1;
+      if (l.slip) byEmail[key].contracts += 1;
+      if (l.stage >= 12 || l.complete) byEmail[key].closed += 1;
     });
-    return Object.keys(map)
-      .map(function (k) {
-        return map[k];
-      })
+    return Object.keys(byEmail).map(function (k) {
+      return byEmail[k];
+    });
+  }
+
+  function topNRows(rows, key, n) {
+    return rows
+      .slice()
       .sort(function (a, b) {
-        return b.collected - a.collected;
+        return (b[key] || 0) - (a[key] || 0);
+      })
+      .slice(0, n)
+      .filter(function (r) {
+        return (r[key] || 0) > 0;
       });
+  }
+
+  function leaderboardCard(title, rows, key) {
+    if (!rows.length) {
+      return (
+        '<div class="leaderboard-mini">' +
+        '<h3>' + esc(title) + '</h3>' +
+        '<p class="muted small" style="margin:6px 0 0">No data yet.</p>' +
+        '</div>'
+      );
+    }
+    var medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
+    var trs = rows
+      .map(function (r, i) {
+        var medal = i < 3 ? medals[i] : '<span class="rank">' + (i + 1) + '</span>';
+        return (
+          '<tr><td class="lb-rank">' +
+          medal +
+          '</td><td>' +
+          esc(r.name) +
+          '</td><td class="lb-num">' +
+          (r[key] || 0) +
+          '</td></tr>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="leaderboard-mini">' +
+      '<h3>' + esc(title) + '</h3>' +
+      '<table class="tbl lb-tbl"><tbody>' + trs + '</tbody></table>' +
+      '</div>'
+    );
   }
 
   function renderLeaderboard() {
     var el = document.getElementById('leaderboard');
     if (!el) return;
-    var rows = aggregateRepStats();
+    var rows = repTotals();
     if (!rows.length) {
       el.innerHTML = '<div class="muted">No rep metrics yet — add customers.</div>';
       return;
     }
-    var medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
     el.innerHTML =
-      '<table class="tbl"><thead><tr><th></th><th>Rep</th><th>KUs</th><th>CIs</th><th>Slips</th><th>Collected</th></tr></thead><tbody>' +
-      rows
-        .map(function (r, i) {
-          var medal = i < 3 ? '<span class="medal">' + medals[i] + '</span>' : '';
-          return (
-            '<tr><td>' +
-            medal +
-            '</td><td>' +
-            esc(r.rep) +
-            '</td><td>' +
-            r.ku +
-            '</td><td>' +
-            r.ci +
-            '</td><td>' +
-            r.slips +
-            '</td><td>' +
-            money(r.collected) +
-            '</td></tr>'
-          );
-        })
-        .join('') +
-      '</tbody></table>';
+      '<div class="leaderboard-grid">' +
+      leaderboardCard('Top 5 — Knock Ups', topNRows(rows, 'knockUps', 5), 'knockUps') +
+      leaderboardCard('Top 5 — Contracts Signed', topNRows(rows, 'contracts', 5), 'contracts') +
+      leaderboardCard('Top 5 — Closed Deals', topNRows(rows, 'closed', 5), 'closed') +
+      '</div>';
   }
 
   function renderTeamTotals() {
     var el = document.getElementById('team-totals');
     if (!el) return;
-    var leads = filterLeads();
-    var totalKu = leads.reduce(function (s, l) {
-      return s + (Number(l.ku) || 0);
-    }, 0);
-    var totalCi = leads.reduce(function (s, l) {
-      return s + (Number(l.ci) || 0);
-    }, 0);
-    var collected = leads.reduce(function (s, l) {
+    var rows = repTotals();
+    var totalKnocks = rows.reduce(function (s, r) { return s + r.knockUps; }, 0);
+    var totalContracts = rows.reduce(function (s, r) { return s + r.contracts; }, 0);
+    var totalClosed = rows.reduce(function (s, r) { return s + r.closed; }, 0);
+    var collected = filterLeads().reduce(function (s, l) {
       return s + (Number(l.collected) || 0);
     }, 0);
-    var conv = totalKu + totalCi > 0 ? ((totalCi / (totalKu + totalCi)) * 100).toFixed(1) : '0.0';
     el.innerHTML =
       '<div class="grid">' +
-      '<div><div class="kpi-sub">Team KUs</div><div class="kpi">' +
-      totalKu +
-      '</div></div>' +
-      '<div><div class="kpi-sub">Team CIs</div><div class="kpi">' +
-      totalCi +
-      '</div></div>' +
-      '<div><div class="kpi-sub">Conversion</div><div class="kpi">' +
-      conv +
-      '%</div></div>' +
-      '<div><div class="kpi-sub">Collected</div><div class="kpi">' +
-      money(collected) +
-      '</div></div>' +
+      '<div><div class="kpi-sub">Knock Ups</div><div class="kpi">' + totalKnocks + '</div></div>' +
+      '<div><div class="kpi-sub">Contracts Signed</div><div class="kpi">' + totalContracts + '</div></div>' +
+      '<div><div class="kpi-sub">Closed Deals</div><div class="kpi">' + totalClosed + '</div></div>' +
+      '<div><div class="kpi-sub">Collected</div><div class="kpi">' + money(collected) + '</div></div>' +
       '</div>';
   }
 
@@ -1495,43 +1544,6 @@
     });
   }
 
-  // Idempotent: always (re)render the Appointment Setter page form so the view
-  // is usable even if the user navigates here before Home has rendered.
-  function ensureAppointmentPage() {
-    var host = document.getElementById('appt-form');
-    if (!host) return;
-    var ds = localDatePlusDays(1);
-    host.innerHTML =
-      '<form id="appt-save-form" action="about:blank" method="get" novalidate>' +
-      '<div class="field"><label>Name</label><input name="ap-name" id="ap-name" placeholder="Last, First or First Last" autocomplete="name" required/></div>' +
-      '<div class="field"><label>Address</label><input name="ap-addr" id="ap-addr" autocomplete="street-address" required/></div>' +
-      '<div class="grid-2">' +
-      '<div class="field"><label>Phone</label><input name="ap-phone" id="ap-phone" type="tel" autocomplete="tel"/></div>' +
-      '<div class="field"><label>Date</label><input name="ap-date" id="ap-date" type="date" value="' +
-      ds +
-      '" required/></div>' +
-      '</div>' +
-      '<div class="field"><label>Time</label><input name="ap-time" id="ap-time" type="time" value="09:00"/></div>' +
-      '<button type="submit" class="btn btn-primary btn-block">Save appointment</button>' +
-      '</form>';
-    var fm = document.getElementById('appt-save-form');
-    if (fm) {
-      fm.addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-        persistAppointmentFromFields(collectApptFields('ap'));
-      });
-    }
-  }
-
-  // Kept for backward compatibility with renderAll(); now delegates.
-  function renderApptPageForm() {
-    ensureAppointmentPage();
-  }
-
-  window.saveApptPage = function () {
-    persistAppointmentFromFields(collectApptFields('ap'));
-  };
 
   function renderCustomersTable(filter) {
     var host = document.getElementById('customers-table');
@@ -2026,20 +2038,6 @@
     document.getElementById('jotform-iframe').src = 'about:blank';
   };
 
-  function checkMissedAppointments() {
-    var now = Date.now();
-    state.appts.forEach(function (a) {
-      if (a.completed || a.missedNotified) return;
-      if (new Date(a.when).getTime() < now - 60 * 60 * 1000) {
-        a.missedNotified = true;
-        var pm = 'mailto:' + state.settings.pmEmail + '?subject=' + encodeURIComponent('Missed appointment: ' + a.name);
-        toast('Missed appointment — notifying PM (mailto link).');
-        window.open(pm);
-      }
-    });
-    persistAppts();
-  }
-
   function scheduleNightlyChatRollup() {
     if (state.nightlyTimer) clearTimeout(state.nightlyTimer);
     var now = new Date();
@@ -2137,6 +2135,41 @@
     renderChat();
   };
 
+  /* ------------------------------------------------------------
+     OTT Boards: per-rep editable spreadsheet that mirrors the
+     "OTT BOARD 2026 - Master" template.
+        Columns: Customer Name | City | Waiting On (Who | Since | What | CB |
+                 Last Attempt | Notes | Next Step | Date Installed | Gutters)
+     ------------------------------------------------------------ */
+
+  var BOARD_COLUMNS = [
+    { key: 'who', label: 'Who' },
+    { key: 'since', label: 'Since' },
+    { key: 'what', label: 'What' },
+    { key: 'cb', label: 'CB' },
+    { key: 'lastAttempt', label: 'Last Attempt' },
+    { key: 'notes', label: 'Notes' },
+    { key: 'nextStep', label: 'Next Step' },
+    { key: 'dateInstalled', label: 'Date Installed' },
+    { key: 'gutters', label: 'Gutters' },
+  ];
+
+  function ensureLeadBoard(lead) {
+    if (!lead.board || typeof lead.board !== 'object') {
+      lead.board = {};
+    }
+    BOARD_COLUMNS.forEach(function (c) {
+      if (lead.board[c.key] == null) lead.board[c.key] = '';
+    });
+    return lead.board;
+  }
+
+  function csvEscape(v) {
+    var s = v == null ? '' : String(v);
+    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
   function renderBoards() {
     var host = document.getElementById('boards-body');
     if (!host) return;
@@ -2145,56 +2178,236 @@
       host.innerHTML = '<div class="empty">Sign in as a team member to view boards.</div>';
       return;
     }
-    var email = u.email || '';
     var leads =
       u.role === 'owner' || u.role === 'admin'
-        ? state.leads
+        ? state.leads.slice()
         : state.leads.filter(function (l) {
-            return l.rep === email;
+            return l.rep === u.email;
           });
-    var appts = appointmentsForCurrentUser().sort(function (a, b) {
-      return new Date(a.when) - new Date(b.when);
+
+    var repFilter = state.boardsRepFilter || 'all';
+    var search = (state.boardsSearch || '').trim().toLowerCase();
+
+    // Build rep options from users (and any rep emails actually on leads).
+    var repNameByEmail = {};
+    state.users.forEach(function (x) {
+      if (x.email) repNameByEmail[x.email] = x.name || x.email;
     });
-    var apptRows =
-      appts.length > 0
-        ? appts
-            .map(function (a) {
-              return (
-                '<tr><td>' +
-                esc(new Date(a.when).toLocaleString()) +
-                '</td><td>' +
-                esc(a.name) +
-                '</td><td>' +
-                esc(a.addr) +
-                '</td></tr>'
-              );
-            })
-            .join('')
-        : '<tr><td colspan="3" class="muted">No appointments yet — use Home or Appointment Setter.</td></tr>';
-    var leadCards =
-      leads.length > 0
-        ? leads
-            .map(function (l) {
-              return (
-                '<div class="card"><h3>' +
-                esc(formatLF(l.name)) +
-                '</h3><p class="muted">Stage ' +
-                l.stage +
-                '</p><button class="btn btn-sm" onclick="openCustomer(\'' +
-                l.id +
-                "')\">Open</button></div>"
-              );
-            })
-            .join('')
-        : '<div class="card"><p class="muted" style="margin:0">No leads assigned — import or add customers.</p></div>';
-    host.innerHTML =
-      '<div class="grid">' +
-      leadCards +
-      '</div>' +
-      '<h2 style="margin-top:18px;font-family:Times New Roman,serif">Appointments</h2>' +
-      '<table class="tbl"><thead><tr><th>When</th><th>Customer</th><th>Address</th></tr></thead><tbody>' +
-      apptRows +
-      '</tbody></table>';
+    var repsPresent = {};
+    leads.forEach(function (l) {
+      var k = l.rep || 'Unassigned';
+      repsPresent[k] = repNameByEmail[k] || k;
+    });
+    var repOptions =
+      '<option value="all"' + (repFilter === 'all' ? ' selected' : '') + '>All reps</option>' +
+      Object.keys(repsPresent)
+        .sort()
+        .map(function (k) {
+          return (
+            '<option value="' + escAttr(k) + '"' + (repFilter === k ? ' selected' : '') + '>' +
+            esc(repsPresent[k]) + '</option>'
+          );
+        })
+        .join('');
+
+    var visible = leads.filter(function (l) {
+      if (repFilter !== 'all' && (l.rep || 'Unassigned') !== repFilter) return false;
+      if (!search) return true;
+      var blob = (l.name + ' ' + l.city + ' ' + l.addr).toLowerCase();
+      return blob.indexOf(search) !== -1;
+    });
+
+    // Group by rep, preserving original lead order within each section.
+    var grouped = {};
+    visible.forEach(function (l) {
+      var k = l.rep || 'Unassigned';
+      if (!grouped[k]) grouped[k] = [];
+      grouped[k].push(l);
+    });
+    var orderedRepKeys = Object.keys(grouped).sort(function (a, b) {
+      var an = (repNameByEmail[a] || a).toLowerCase();
+      var bn = (repNameByEmail[b] || b).toLowerCase();
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    });
+
+    var toolbar =
+      '<div class="boards-toolbar">' +
+      '<div class="field" style="margin:0;min-width:180px"><label>Representative</label>' +
+      '<select id="boards-rep-filter">' + repOptions + '</select></div>' +
+      '<div class="field" style="margin:0;flex:1;min-width:180px"><label>Search</label>' +
+      '<input id="boards-search" type="search" placeholder="Customer or city" value="' +
+      escAttr(state.boardsSearch || '') + '"/></div>' +
+      '<button type="button" class="btn btn-sm" id="boards-export" style="align-self:flex-end">Export CSV</button>' +
+      '</div>';
+
+    var sections = orderedRepKeys
+      .map(function (rk) {
+        return renderBoardSection(rk, repNameByEmail[rk] || rk, grouped[rk]);
+      })
+      .join('');
+
+    if (!sections) {
+      sections = '<div class="empty" style="margin-top:12px">No leads match the current filter.</div>';
+    }
+
+    host.innerHTML = toolbar + sections;
+    wireBoardsHandlers();
+  }
+
+  function renderBoardSection(repKey, repLabel, leads) {
+    var headRow1 =
+      '<tr>' +
+      '<th rowspan="2" class="board-name">CUSTOMER NAME</th>' +
+      '<th rowspan="2">CITY</th>' +
+      '<th colspan="' + BOARD_COLUMNS.length + '" class="board-waiting">Waiting On</th>' +
+      '</tr>';
+    var headRow2 =
+      '<tr>' +
+      BOARD_COLUMNS.map(function (c) {
+        return '<th>' + esc(c.label.toUpperCase()) + '</th>';
+      }).join('') +
+      '</tr>';
+    var bodyRows = leads
+      .map(function (l) {
+        ensureLeadBoard(l);
+        var cells = BOARD_COLUMNS.map(function (c) {
+          return (
+            '<td><input class="board-input" data-lead-id="' +
+            escAttr(l.id) +
+            '" data-field="' +
+            escAttr(c.key) +
+            '" value="' +
+            escAttr(l.board[c.key] || '') +
+            '"/></td>'
+          );
+        }).join('');
+        return (
+          '<tr>' +
+          '<td class="board-name"><a href="javascript:void(0)" onclick="openCustomer(\'' +
+          escAttr(l.id) +
+          '\')">' +
+          esc(formatLF(l.name)) +
+          '</a></td>' +
+          '<td>' + esc(l.city || '') + '</td>' +
+          cells +
+          '</tr>'
+        );
+      })
+      .join('');
+
+    return (
+      '<div class="board-section">' +
+      '<h2 class="board-rep">REPRESENTATIVE: ' + esc(repLabel) + '</h2>' +
+      '<div class="ott-board-wrap">' +
+      '<table class="ott-board"><thead>' + headRow1 + headRow2 + '</thead>' +
+      '<tbody>' + bodyRows + '</tbody></table>' +
+      '</div></div>'
+    );
+  }
+
+  // Debounced persistence for board cell edits.
+  var _boardSaveTimer = null;
+  function flashBoardSavedIndicator() {
+    var pill = document.getElementById('boards-saved-pill');
+    if (!pill) {
+      pill = document.createElement('div');
+      pill.id = 'boards-saved-pill';
+      pill.className = 'boards-saved';
+      pill.textContent = 'Saved';
+      document.body.appendChild(pill);
+    }
+    pill.classList.add('on');
+    clearTimeout(pill._tid);
+    pill._tid = setTimeout(function () {
+      pill.classList.remove('on');
+    }, 900);
+  }
+
+  function wireBoardsHandlers() {
+    var host = document.getElementById('boards-body');
+    if (!host || host._wired) return;
+    host._wired = true;
+
+    host.addEventListener('input', function (ev) {
+      var t = ev.target;
+      if (!t || !t.classList) return;
+      if (t.id === 'boards-search') {
+        state.boardsSearch = t.value;
+        clearTimeout(host._searchTimer);
+        host._searchTimer = setTimeout(function () {
+          renderBoards();
+        }, 200);
+        return;
+      }
+      if (t.classList.contains('board-input')) {
+        var id = t.getAttribute('data-lead-id');
+        var field = t.getAttribute('data-field');
+        var lead = getLeadById(id);
+        if (!lead) return;
+        ensureLeadBoard(lead)[field] = t.value;
+        clearTimeout(_boardSaveTimer);
+        _boardSaveTimer = setTimeout(function () {
+          persistLeads();
+          flashBoardSavedIndicator();
+        }, 250);
+      }
+    });
+
+    host.addEventListener('change', function (ev) {
+      var t = ev.target;
+      if (t && t.id === 'boards-rep-filter') {
+        state.boardsRepFilter = t.value;
+        renderBoards();
+      }
+    });
+
+    host.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.id === 'boards-export') {
+        exportBoardsCsv();
+      }
+    });
+  }
+
+  function exportBoardsCsv() {
+    var u = getUser();
+    if (!u || u.role === 'homeowner') return;
+    var leads =
+      u.role === 'owner' || u.role === 'admin'
+        ? state.leads.slice()
+        : state.leads.filter(function (l) {
+            return l.rep === u.email;
+          });
+    var repFilter = state.boardsRepFilter || 'all';
+    var search = (state.boardsSearch || '').trim().toLowerCase();
+    var visible = leads.filter(function (l) {
+      if (repFilter !== 'all' && (l.rep || 'Unassigned') !== repFilter) return false;
+      if (!search) return true;
+      var blob = (l.name + ' ' + l.city + ' ' + l.addr).toLowerCase();
+      return blob.indexOf(search) !== -1;
+    });
+    var headers = ['Representative', 'Customer Name', 'City'].concat(
+      BOARD_COLUMNS.map(function (c) { return c.label; })
+    );
+    var lines = [headers.map(csvEscape).join(',')];
+    visible.forEach(function (l) {
+      ensureLeadBoard(l);
+      var row = [l.rep || 'Unassigned', formatLF(l.name), l.city || ''].concat(
+        BOARD_COLUMNS.map(function (c) { return l.board[c.key] || ''; })
+      );
+      lines.push(row.map(csvEscape).join(','));
+    });
+    var blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'ott-boards-' + localDatePlusDays(0) + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
+    toast('Boards exported.');
   }
 
   function renderHomeownerPortal() {
@@ -2623,9 +2836,14 @@
 
   window.genPayReport = function () {
     var split = document.getElementById('pay-split').value;
-    var lines = aggregateRepStats()
-      .map(function (r) {
-        return r.rep + ': collected ' + money(r.collected) + ' — split ' + split + ' (calc stub)';
+    var collectedByRep = {};
+    filterLeads().forEach(function (l) {
+      var k = l.rep || 'Unassigned';
+      collectedByRep[k] = (collectedByRep[k] || 0) + (Number(l.collected) || 0);
+    });
+    var lines = Object.keys(collectedByRep)
+      .map(function (rep) {
+        return rep + ': collected ' + money(collectedByRep[rep]) + ' — split ' + split + ' (calc stub)';
       })
       .join('\n');
     document.getElementById('pay-out').textContent = lines || 'No data';
