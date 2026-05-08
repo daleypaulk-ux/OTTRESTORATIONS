@@ -1190,6 +1190,16 @@ ol.areas .score {
 .flex.between { justify-content: space-between; }
 
 /* ============================================================
+   Home Leads card (full-width chronological list)
+   ============================================================ */
+
+.home-leads-wrap { overflow-x: auto; }
+.home-leads-tbl { min-width: 720px; }
+.home-leads-tbl th,
+.home-leads-tbl td { padding: 10px 12px; vertical-align: middle; white-space: nowrap; }
+.home-leads-tbl td:nth-child(3) { white-space: normal; min-width: 200px; }
+
+/* ============================================================
    Leaderboard mini-cards
    ============================================================ */
 

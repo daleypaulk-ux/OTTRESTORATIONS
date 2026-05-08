@@ -104,7 +104,7 @@
             <h1>Home</h1>
             <span class="muted small" id="home-greeting"></span>
           </div>
-          <div class="grid">
+          <div class="grid-2">
             <div class="card" id="weather-card">
               <div class="card-hd">
                 <h2>Weather</h2>
@@ -128,16 +128,23 @@
               </div>
             </div>
             <div class="card">
-              <div class="card-hd" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-                <h2 style="margin:0">Leads</h2>
-                <button type="button" class="btn btn-sm btn-primary" onclick="topNav('knockups')">+ New Knock Up</button>
-              </div>
-              <div id="home-leads"></div>
-            </div>
-            <div class="card">
               <h2>Today's To-Do</h2>
               <div id="todo-list"></div>
             </div>
+          </div>
+
+          <div class="card" style="margin-top:16px;">
+            <div class="card-hd" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <h2 style="margin:0">Leads</h2>
+                <span id="home-leads-count" class="muted small"></span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="topNav('customers')">View all customers</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="topNav('knockups')">+ New Knock Up</button>
+              </div>
+            </div>
+            <div id="home-leads"></div>
           </div>
 
           <div class="grid-2" style="margin-top:16px;">

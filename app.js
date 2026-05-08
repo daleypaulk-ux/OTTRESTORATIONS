@@ -898,46 +898,74 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + hm;
   }
 
+  // Build an email -> display-name lookup so the Door Knocker column shows
+  // "Sample Rep" instead of "rep@ottrestoration.com" for legacy seed leads.
+  function buildRepNameByEmail() {
+    var map = {};
+    state.users.forEach(function (x) {
+      if (x.email) map[x.email] = x.name || x.email;
+    });
+    return map;
+  }
+
   function renderHomeLeads() {
     var host = document.getElementById('home-leads');
     if (!host) return;
+    var countEl = document.getElementById('home-leads-count');
     var u = getUser();
     if (!u || u.role === 'homeowner') {
       host.innerHTML = '';
+      if (countEl) countEl.textContent = '';
       return;
     }
-    var rows = leadsForCurrentUser()
-      .slice()
-      .sort(function (a, b) {
-        return leadSortStamp(b) - leadSortStamp(a);
-      })
-      .slice(0, 25);
+    var all = leadsForCurrentUser();
+    // Two-tier sort: leads with a real knockedAt always come before legacy
+    // leads (no timestamp), so a freshly-logged knock-up never gets out-ranked
+    // by a seed lead whose uid happens to encode a similar millisecond.
+    var withTs = all.filter(function (l) { return !!l.knockedAt; });
+    var legacy = all.filter(function (l) { return !l.knockedAt; });
+    withTs.sort(function (a, b) {
+      return new Date(b.knockedAt).getTime() - new Date(a.knockedAt).getTime();
+    });
+    legacy.sort(function (a, b) {
+      return leadSortStamp(b) - leadSortStamp(a);
+    });
+    var rows = withTs.concat(legacy).slice(0, 25);
+    if (countEl) {
+      countEl.textContent = all.length === 1 ? '1 lead' : all.length + ' leads';
+    }
     if (!rows.length) {
       host.innerHTML =
         '<p class="muted" style="margin:0">No leads yet. Log a knock up from the Knock Ups tab.</p>';
       return;
     }
+    var repNames = buildRepNameByEmail();
     host.innerHTML =
-      '<table class="tbl"><thead><tr>' +
+      '<div class="home-leads-wrap">' +
+      '<table class="tbl home-leads-tbl"><thead><tr>' +
       '<th>Time</th><th>Customer</th><th>Address</th><th>Door Knocker</th><th>Stage</th><th></th>' +
       '</tr></thead><tbody>' +
       rows
         .map(function (l) {
           var stamp = l.knockedAt ? formatRelativeStamp(l.knockedAt) : '—';
-          var knocker = l.knockedBy || l.rep || '';
+          var knocker = l.knockedBy || repNames[l.rep] || l.rep || 'Unassigned';
+          var addr = (l.addr || '') + (l.city ? ', ' + l.city : '');
+          var stageLabel = STAGE_LABELS[(l.stage || 1) - 1] || '';
           return (
             '<tr>' +
             '<td class="muted small">' + esc(stamp) + '</td>' +
-            '<td>' + esc(formatLF(l.name)) + '</td>' +
-            '<td>' + esc(l.addr || '') + (l.city ? ', ' + esc(l.city) : '') + '</td>' +
+            '<td><strong>' + esc(formatLF(l.name)) + '</strong></td>' +
+            '<td>' + esc(addr) + '</td>' +
             '<td>' + esc(knocker) + '</td>' +
-            '<td><span class="pill">' + l.stage + '</span></td>' +
+            '<td><span class="pill">' + l.stage + '</span> <span class="muted small">' + esc(stageLabel) + '</span></td>' +
             '<td><button class="btn btn-sm" onclick="openCustomer(\'' + escAttr(l.id) + '\')">Open</button></td>' +
             '</tr>'
           );
         })
         .join('') +
-      '</tbody></table>';
+      '</tbody></table>' +
+      (all.length > rows.length ? '<p class="muted small" style="margin:8px 0 0">Showing ' + rows.length + ' of ' + all.length + '. <a href="javascript:void(0)" onclick="topNav(\'customers\')">View all in Customers</a></p>' : '') +
+      '</div>';
   }
 
   /* ------------------------------------------------------------
