@@ -8,7 +8,7 @@ Vanilla static CRM for Over The Top Restoration — **no build step**. Deploy fr
 |------|--------|
 | **Production URL** | [https://t-o-p.netlify.app/](https://t-o-p.netlify.app/) |
 | **Netlify project slug** | `t-o-p` (shown in the dashboard — not the same as the GitHub repo name) |
-| **This repository** | `daleypaulk-ux/OTTRESTORATIONS` on GitHub |
+| **GitHub (Netlify deploy)** | `zaveirdaley-cell/t-o-p` — branch **`main`** (same app as this folder; `origin` may point at `daleypaulk-ux/OTTRESTORATIONS` for a second remote) |
 
 Continuous deployment: link **this** repo in Netlify (**Project configuration → Build & deploy → Continuous deployment**), branch **`main`**.
 
