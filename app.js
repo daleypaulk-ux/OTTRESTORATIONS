@@ -2592,7 +2592,7 @@
       '<ul class="map-fail-list">' +
       '<li>Use <strong>HTTPS</strong> (Netlify preview/production), not <code>file://</code>.</li>' +
       '<li>Google Cloud: enable <strong>Maps JavaScript API</strong>, <strong>Places API</strong> (autocomplete), <strong>Geocoding API</strong> (search &amp; ping placement), and <strong>billing</strong>.</li>' +
-      '<li>API key: <strong>Application restrictions</strong> = HTTP referrers — add your site, e.g. <code>https://*.netlify.app/*</code> and <code>http://localhost:*/*</code> for local dev.</li>' +
+      '<li>API key: <strong>Application restrictions</strong> = HTTP referrers — add your site, e.g. <code>https://t-o-p.netlify.app/*</code>, <code>https://*.netlify.app/*</code>, and <code>http://localhost:*/*</code> for local dev.</li>' +
       '<li><strong>API restrictions</strong>: allow at least those three APIs (or &ldquo;Don&rsquo;t restrict&rdquo; while testing).</li>' +
       '</ul>' +
       '<p class="muted small">Paste the key in <strong>Settings</strong> &rarr; Google Maps JS API key, then reload this page.</p>' +
@@ -2731,10 +2731,13 @@
           return;
         }
         focusMapOnGeometry(place.geometry);
-        toast(
-          'HailTrace integration: configure API key in Settings. Demo result for: ' +
-            (place.formatted_address || place.name || '')
-        );
+        var loc = place.geometry.location;
+        queryHailProxy({
+          label: place.formatted_address || place.name || '',
+          address: place.formatted_address || '',
+          lat: typeof loc.lat === 'function' ? loc.lat() : loc.lat,
+          lng: typeof loc.lng === 'function' ? loc.lng() : loc.lng,
+        });
         setTimeout(function () {
           state._mapPlaceSelecting = false;
         }, 200);
@@ -2802,11 +2805,56 @@
       if (state.map) {
         focusMapOnGeometry(r.geometry);
       }
-      toast(
-        'HailTrace integration: configure API key in Settings. Demo result for: ' + (r.formatted_address || q)
-      );
+      var loc = r.geometry.location;
+      queryHailProxy({
+        label: r.formatted_address || q,
+        address: r.formatted_address || q,
+        lat: typeof loc.lat === 'function' ? loc.lat() : loc.lat,
+        lng: typeof loc.lng === 'function' ? loc.lng() : loc.lng,
+      });
     });
   };
+
+  function queryHailProxy(opts) {
+    var label = opts.label || opts.address || '';
+    var body = {
+      address: opts.address || '',
+      lat: typeof opts.lat === 'number' ? opts.lat : undefined,
+      lng: typeof opts.lng === 'number' ? opts.lng : undefined,
+    };
+    fetch('/.netlify/functions/hail-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          return { ok: res.ok, status: res.status, data: data };
+        });
+      })
+      .then(function (resp) {
+        if (resp.status === 501) {
+          toast('HailTrace not configured on server. Demo result for: ' + label);
+          return;
+        }
+        if (!resp.ok) {
+          var msg = (resp.data && resp.data.error) || ('HTTP ' + resp.status);
+          toast('HailTrace error: ' + msg);
+          return;
+        }
+        var d = resp.data || {};
+        var events = d.events || d.hail || d.results || [];
+        var count = Array.isArray(events) ? events.length : 0;
+        if (!count) {
+          toast('No recent hail reported near: ' + label);
+          return;
+        }
+        toast('HailTrace: ' + count + ' hail event(s) near ' + label);
+      })
+      .catch(function () {
+        toast('HailTrace proxy unreachable. Demo result for: ' + label);
+      });
+  }
 
   function geocodeAndAddPing(raw) {
     raw = (raw || '').trim();
@@ -3141,10 +3189,11 @@
       '<div class="field"><label>Google Maps JS API key</label><input id="set-maps" value="' +
       escAttr(state.settings.googleMapsKey || '') +
       '" autocomplete="off" spellcheck="false"/>' +
-      '<p class="muted small" style="margin-top:6px">In Google Cloud: enable <strong>Maps JavaScript API</strong>, <strong>Places API</strong> (address autocomplete), and <strong>Geocoding API</strong> (search / ping geocoding), with billing. Key restrictions: HTTP referrers for your domain (e.g. <code>https://*.netlify.app/*</code>) and API restriction including those three (or unrestricted while testing).</p></div>' +
-      '<div class="field"><label>HailTrace API key</label><input id="set-hail" value="' +
+      '<p class="muted small" style="margin-top:6px">In Google Cloud: enable <strong>Maps JavaScript API</strong>, <strong>Places API</strong> (address autocomplete), and <strong>Geocoding API</strong> (search / ping geocoding), with billing. Key restrictions: HTTP referrers for your domain (production <code>https://t-o-p.netlify.app/*</code>, plus deploy previews <code>https://*.netlify.app/*</code>) and API restriction including those three (or unrestricted while testing).</p></div>' +
+      '<div class="field"><label>HailTrace API key (legacy local-only — prefer server proxy)</label><input id="set-hail" value="' +
       escAttr(state.settings.hailtraceKey || '') +
-      '"/></div>' +
+      '"/>' +
+      '<p class="muted small" style="margin-top:6px">Live hail lookups now go through <code>/.netlify/functions/hail-proxy</code>. Set <code>HAILTRACE_APP_ID</code> (and optional <code>HAILTRACE_API_KEY</code>) on Netlify rather than storing it here.</p></div>' +
       '<div class="field"><label>Anthropic API key (dev only — prefer proxy)</label><input id="set-anth" value="' +
       escAttr(state.settings.anthropicKey || '') +
       '"/></div>' +
